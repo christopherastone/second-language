@@ -49,8 +49,8 @@ A single normalized sentence of foreign-language text.
 - **Normalization**: Unicode NFKC with internal whitespace collapsed (no double spaces) and leading/trailing whitespace trimmed.
 - **Invariant**: All sentences are normalized before being inserted into the database, so all stored sentence text is already normalized.
 - **Sources**: (The first sentences of) RSS headlines from configured feeds.
-- **Hash slug**: The first 10 hex characters of the SHA-256 hash of the normalized text, lowercased.
-- **URL pattern**: `/<lang>/sentence/<hash_slug>` (e.g., `/sl/sentence/a1b2c3d4e5`).
+- **Hash slug**: The first 16 hex characters of the SHA-256 hash of the normalized text, lowercased.
+- **URL pattern**: `/<lang>/sentence/<hash_slug>` (e.g., `/sl/sentence/a1b2c3d4e5f6g7h8`).
 
 
 ### Token
@@ -125,6 +125,7 @@ The canonical dictionary form of a token.
 ### Login Rate Limiting
 
 - Per-username exponential backoff on failed login attempts.
+- **Storage**: In-memory (resets on server restart).
 - Initial delay: 5 seconds after first failure.
 - Multiplier: 2x on each subsequent failure.
 - Maximum delay: 60 seconds.
@@ -156,7 +157,7 @@ The canonical dictionary form of a token.
   - A filled star icon if the sentence is in the user's favorites.
   - Parenthesized access count (omit if access count is zero; never-accessed sentences show no count).
 - Sorted by insert time, newest first.
-- Limited to 100 sentences (no pagination, no search/filter).
+- No pagination or search/filter. All sentences displayed.
 - Clicking a sentence navigates to its detail page. Words/lemmas are not separately clickable.
 
 ### Sentence Detail Page
@@ -173,7 +174,7 @@ The canonical dictionary form of a token.
      - Gloss format: `translation.tag1.tag2` (Leipzig abbreviations, dot-separated, tags after translation, e.g., `to run.3.sg`).
      - If a word has no Leipzig tags (e.g., simple prepositions), show translation only without POS annotation.
      - Allowable Leipzig Glossing tags: `1`, `2`, `3`, `sg`, `du`, `pl`, `nom`, `gen`, `dat`, `acc`, `ins`, `loc`, `refl`, `m`, `f`, `n`.
-     - Word tokens link to their lemma page but have no visual click indication (no underline); user discovers clickability by clicking.
+     - Word tokens link to their lemma page; show underline on hover (standard link behavior).
      - Punctuation tokens have the same inline-block layout but with empty gloss row.
      - Loanword tokens (foreign words not lemmatized) display with empty gloss area below.
 
@@ -308,9 +309,9 @@ All cached payload fields are stored as JSON in `TEXT` columns.
 
 The database stores a versioning field to control cache invalidation:
 
-- `schema_version` (integer): bumped when the JSON structure changes.
+- `schema_version` (integer column): bumped when the JSON structure changes. Stored only in the database column, not duplicated inside JSON payloads.
 
-Cached content with mismatched `schema_version` is treated as a cache miss and regenerated lazily on next access.
+Cached content with mismatched `schema_version` is treated as a cache miss and regenerated on next access.
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -368,7 +369,7 @@ CREATE TABLE IF NOT EXISTS favorites (
   item_id INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
   UNIQUE(username, item_type, item_id),
-  FOREIGN KEY (username) REFERENCES users(username)
+  FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_favorites_username
@@ -376,6 +377,10 @@ CREATE INDEX IF NOT EXISTS idx_favorites_username
 ```
 
 Foreign keys are not required for token-to-lemma relationships because tokenization and lemma links are stored inside cached JSON payloads.
+
+**Cascade delete behavior**:
+- When a user is deleted, their favorites are automatically deleted (ON DELETE CASCADE).
+- When a sentence or lemma is deleted, the application must first delete any favorites pointing to it (DELETE FROM favorites WHERE item_type=? AND item_id=?).
 
 ---
 
@@ -393,13 +398,19 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
   3. Process the headline: decode HTML entities (`&amp;`, `&quot;`, etc.), strip editorial markers (`[VIDEO]`, `[FOTO]`, etc.) and truncation markers (`...`).
   4. Normalize the sentence (Unicode NFKC, collapse whitespace, trim).
   5. Skip headlines that become empty after processing.
-  6. Insert the sentence into the `sentences` table (content generated lazily on first access).
+  6. Call LLM to generate content (gloss, proper nouns, grammar notes).
+  7. Only insert the sentence into the `sentences` table if LLM generation succeeds.
+  8. If LLM fails, skip that headline (do not add to database or deduplication table).
+
+**Note**: Content is generated eagerly at import time, not lazily on first access. This ensures all sentences in the database have complete content.
 
 ### Feed Configuration
 
 - Feeds are defined in a configuration file `feeds.yaml`.
+- **Startup validation**: Exit with clear error if `feeds.yaml` is missing or contains malformed YAML.
 - Each feed specifies: URL, language code, enabled/disabled flag.
 - Feed management is via manual YAML editing only (no CLI commands for feeds).
+- **Language validity**: A language is valid if ANY feed entry exists for that language code, regardless of whether feeds are enabled or disabled.
 - Articles are deduplicated by the RSS item's `id`/GUID field as returned by the RSS parser.
   - If the feed does not provide an `id`/GUID, fall back to a hash of the item's link URL.
 - Deleting a sentence keeps its article_id in `rss_articles` (sentence won't be re-imported).
@@ -421,7 +432,7 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
 
 ### Startup Validation
 
-- On app startup, make a test API call to verify the OpenAI API key is valid.
+- On app startup, call the OpenAI `/models` endpoint (free, no cost) to verify the API key is valid.
 - If the test call fails, exit with a clear error message (app won't function without valid key).
 
 ### Request Handling
@@ -496,13 +507,14 @@ All cached LLM outputs must validate against the relevant schema version before 
 
 Top-level object:
 
-- `schema_version` (number): `1`
 - `sentence_text` (string): must equal the normalized sentence text stored in `sentences.text`.
   - This intentionally duplicates the stored sentence string so cached payloads are self-contained and so the server can validate that the LLM output corresponds to the requested sentence.
 - `tokens` (array of `Token`)
 - `proper_nouns` (array of `ProperNoun`)
 - `grammar_notes` (array of `GrammarNote`)
 - `model_used` (string)
+
+Note: `schema_version` is stored in the database column only, not in the JSON payload.
 
 `Token` object:
 
@@ -535,7 +547,6 @@ JSON Schema:
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version",
     "sentence_text",
     "tokens",
     "proper_nouns",
@@ -543,9 +554,6 @@ JSON Schema:
     "model_used"
   ],
   "properties": {
-    "schema_version": {
-      "const": 1
-    },
     "sentence_text": {
       "type": "string",
       "minLength": 1,
@@ -610,20 +618,15 @@ JSON Schema:
             }
           }
         },
-        "allOf": [
-          {
-            "if": {
-              "properties": {
-                "is_punct": { "const": false },
-                "is_loanword": { "not": { "const": true } }
-              },
-              "required": ["is_punct"]
-            },
-            "then": {
-              "required": ["lemma", "pos", "gloss", "tags"]
-            }
-          }
-        ]
+        "if": {
+          "allOf": [
+            { "properties": { "is_punct": { "const": false } } },
+            { "not": { "properties": { "is_loanword": { "const": true } } } }
+          ]
+        },
+        "then": {
+          "required": ["lemma", "pos", "gloss", "tags"]
+        }
       }
     },
     "proper_nouns": {
@@ -662,12 +665,13 @@ JSON Schema:
 
 Top-level object:
 
-- `schema_version` (number): `1`
 - `lemma` (string)
 - `normalized_lemma` (string): already normalized; used for storage and URLs
 - `translation` (string)
 - `related_words` (array of `RelatedWord`, length <= 8)
 - `model_used` (string)
+
+Note: `schema_version` is stored in the database column only, not in the JSON payload.
 
 `RelatedWord` object:
 
@@ -685,7 +689,6 @@ JSON Schema:
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schema_version",
     "lemma",
     "normalized_lemma",
     "translation",
@@ -693,9 +696,6 @@ JSON Schema:
     "model_used"
   ],
   "properties": {
-    "schema_version": {
-      "const": 1
-    },
     "lemma": {
       "type": "string",
       "minLength": 1
@@ -755,8 +755,8 @@ A unified CLI script named `cli` manages users and sentences:
 - `cli sentences add --text <text> --language <lang>` (both arguments required)
 
 **Validation:**
-- `default_language`: lowercase two-letter language code matching `^[a-z]{2}$` with feeds configured for that language in `feeds.yaml`.
-- `--language` for sentences: must have feeds configured for that language.
+- `default_language`: lowercase two-letter language code matching `^[a-z]{2}$` with any feed entry (enabled or disabled) for that language in `feeds.yaml`.
+- `--language` for sentences: must have any feed entry (enabled or disabled) for that language.
 
 ### `feeds.yaml` format
 

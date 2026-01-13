@@ -50,7 +50,7 @@ All required (app fails to start if missing):
 |----------|---------|
 | `SECRET_KEY` | Flask session signing key |
 | `DATABASE_PATH` | Path to SQLite database file (no default) |
-| `OPENAI_API_KEY` | OpenAI API key (validated on startup) |
+| `OPENAI_API_KEY` | OpenAI API key (validated via /models endpoint on startup) |
 
 ## Architecture
 
@@ -58,42 +58,47 @@ All required (app fails to start if missing):
 
 - `/login` - Login page
 - `/` - Redirects to user's default language
-- `/<lang>/` - Sentence list for language (404 if no feeds configured)
-- `/<lang>/sentence/<hash_slug>` - Sentence detail (hash_slug = first 10 hex chars of SHA-256)
+- `/<lang>/` - Sentence list for language (404 if no feed entries)
+- `/<lang>/sentence/<hash_slug>` - Sentence detail (hash_slug = first 16 hex chars of SHA-256)
 - `/<lang>/lemma/<normalized_lemma>` - Lemma detail (URL-encoded)
 - `/favorites` - User's favorited sentences and lemmas
 
 ### Data Flow
 
+**Sentences (eager generation):**
 1. RSS headlines fetched via "Update" button on sentence list page
 2. Headlines processed: decode HTML entities, strip editorial markers `[VIDEO]`, normalize
-3. Headlines stored in `sentences` table (no content yet)
-4. On first sentence detail access, LLM generates gloss/grammar/proper nouns
-5. LLM output validated against JSON schema, cached in database
-6. Subsequent visits serve cached content instantly
-7. Schema version mismatches trigger lazy regeneration on next access
+3. LLM generates content (gloss/grammar/proper nouns) immediately
+4. Only sentences with successful LLM generation are inserted into database
+5. Failed generations are skipped (not added to database or dedup table)
+
+**Lemmas (lazy generation):**
+1. Lemma records created when user visits the lemma page
+2. LLM generates content inline with loading state
+3. Cached in database for subsequent visits
 
 ### Key Concepts
 
 - **Normalization**: Unicode NFKC, collapsed whitespace, trimmed. Applied to all sentences and lemmas before storage/lookup.
 - **Tokenization**: Produced by LLM (not local tokenizer). Multi-word proper nouns are single tokens. Loanwords marked with `is_loanword: true`.
 - **Gloss format**: `translation.tag1.tag2` (Leipzig abbreviations, dot-separated, e.g., `to run.3.sg`)
-- **Schema versioning**: Cached content has `schema_version`; mismatches trigger lazy regeneration.
+- **Schema versioning**: `schema_version` stored in database column only (not in JSON). Mismatches trigger regeneration.
 - **Access counting**: Full page loads (not HTMX partials) increment counters. Omit `(0)` on sentence list.
-- **Favorites**: Per-user (not shared), star icon toggle, unified favorites page.
+- **Favorites**: Per-user (not shared), star icon toggle, unified favorites page. Cascade deleted when sentence/lemma/user deleted.
+- **Language validity**: Any feed entry (enabled or disabled) makes a language code valid.
 
 ### Database Tables
 
 - `users` - username, password_hash, default_language
-- `sentences` - language, hash, text, gloss_json, proper_nouns_json, grammar_notes_json, model_used, schema_version, access_count
+- `sentences` - language, hash (16 chars), text, gloss_json, proper_nouns_json, grammar_notes_json, model_used, schema_version, access_count
 - `lemmas` - language, normalized_lemma, translation, related_words_json, model_used, schema_version, access_count
 - `rss_articles` - feed_id, article_id (deduplication, kept on sentence delete)
-- `favorites` - username, item_type, item_id, created_at
+- `favorites` - username (ON DELETE CASCADE), item_type, item_id, created_at
 
 ### LLM Integration
 
 - Models: `gpt-5-nano` (default), `gpt-5-mini`, `gpt-5` (all shown in selector)
-- Startup: Test API call to validate key, exit if invalid
+- Startup: Call `/models` endpoint (free) to validate key, exit if invalid
 - Timeout: 60 seconds
 - Retries: up to 2 on transient errors (429, 5xx)
 - Invalid JSON: one retry, then show error with model selector + "Try again" button
@@ -112,7 +117,7 @@ All required (app fails to start if missing):
 - HTMX state changes require `X-CSRFToken` header
 - Passwords hashed with PBKDF2-SHA256 (Werkzeug)
 - Session cookies: HttpOnly, SameSite=Lax, Secure (if HTTPS)
-- Login rate limiting: 5s initial delay, 2x backoff, 60s cap, decays after 1 hour
+- Login rate limiting: in-memory (resets on restart), 5s initial, 2x backoff, 60s cap, decays after 1 hour
 - All routes except `/login` require authentication
 - No logout button (sessions persist until browser clears cookies)
 
@@ -123,11 +128,14 @@ All required (app fails to start if missing):
 - Header shows: logo, language switcher (if multiple languages), favorites link
 - No username display
 - Footer shows app version (from pyproject.toml)
-- Token clicks navigate directly (no preview, no visual click indication)
+- Token clicks: show underline on hover (standard link behavior)
 - Gloss text: same size as token, muted color
-- Delete buttons: immediate action, no confirmation
-- Sentence deletion: keeps article_id in rss_articles, lemmas remain
+- Delete buttons: immediate action, no confirmation, cascade deletes favorites
+- Sentence deletion: keeps article_id in rss_articles, lemmas remain (orphan growth accepted)
 
 ## Configuration Files
 
-- `feeds.yaml` - RSS feed definitions with id, url, language, enabled fields (manual editing only)
+- `feeds.yaml` - RSS feed definitions with id, url, language, enabled fields
+  - Manual editing only (no CLI)
+  - Missing/malformed file causes startup failure
+  - Language valid if any feed entry exists (enabled or not)
