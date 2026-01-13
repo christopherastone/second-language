@@ -28,11 +28,9 @@ uv sync
 # Initialize database
 uv run python init_db.py
 
-# Unified CLI for user and sentence management
-uv run python cli users list
-uv run python cli users create --username <user> --password <pass> --default-language <lang>
-uv run python cli users update --username <user> [--password <pass>] [--default-language <lang>]
-uv run python cli users delete --username <user>
+# CLI for settings and sentence management
+uv run python cli set-password <password>
+uv run python cli set-language <lang>
 uv run python cli sentences add --text <text> --language <lang>
 
 # Run development server
@@ -56,12 +54,12 @@ All required (app fails to start if missing):
 
 ### URL Structure
 
-- `/login` - Login page
-- `/` - Redirects to user's default language
+- `/login` - Password-only login page
+- `/` - Redirects to configured default language
 - `/<lang>/` - Sentence list for language (404 if no feed entries)
 - `/<lang>/sentence/<hash_slug>` - Sentence detail (hash_slug = first 16 hex chars of SHA-256)
 - `/<lang>/lemma/<normalized_lemma>` - Lemma detail (URL-encoded)
-- `/favorites` - User's favorited sentences and lemmas
+- `/favorites` - Favorited sentences and lemmas
 
 ### Data Flow
 
@@ -84,16 +82,16 @@ All required (app fails to start if missing):
 - **Gloss format**: `translation.tag1.tag2` (Leipzig abbreviations, dot-separated, e.g., `to run.3.sg`)
 - **Schema versioning**: `schema_version` stored in database column only (not in JSON). Mismatches trigger regeneration.
 - **Access counting**: Full page loads (not HTMX partials) increment counters. Omit `(0)` on sentence list.
-- **Favorites**: Per-user (not shared), star icon toggle, unified favorites page. Cascade deleted when sentence/lemma/user deleted.
+- **Favorites**: Global (single-user app), star icon toggle, unified favorites page. Cascade deleted when sentence/lemma deleted.
 - **Language validity**: Any feed entry (enabled or disabled) makes a language code valid.
 
 ### Database Tables
 
-- `users` - username, password_hash, default_language
+- `settings` - password_hash, default_language (single row, id=1)
 - `sentences` - language, hash (16 chars), text, gloss_json, proper_nouns_json, grammar_notes_json, model_used, schema_version, access_count
 - `lemmas` - language, normalized_lemma, translation, related_words_json, model_used, schema_version, access_count
 - `rss_articles` - feed_id, article_id (deduplication, kept on sentence delete)
-- `favorites` - username (ON DELETE CASCADE), item_type, item_id, created_at
+- `favorites` - item_type, item_id, created_at
 
 ### LLM Integration
 
@@ -126,7 +124,6 @@ All required (app fails to start if missing):
 - App name: "Second Language"
 - Single light theme (no dark mode)
 - Header shows: logo, language switcher (if multiple languages), favorites link
-- No username display
 - Footer shows app version (from pyproject.toml)
 - Token clicks: show underline on hover (standard link behavior)
 - Gloss text: same size as token, muted color

@@ -96,22 +96,21 @@ The canonical dictionary form of a token.
 
 ### Overview
 
-- Login (username + password) is required for access.
-- The app does **not** track individual user progress; cached content and access counts are shared globally across all users.
-- Multiple user accounts may exist, but they share a single content database.
-- Each user has a `default_language` preference, which affects the sentence page displayed after login or upon accessing the path `/`.
-- Each user has their own favorites list (sentences and lemmas). Favorites are per-user, not shared globally.
+- Single-user application designed for personal use with remote access.
+- Login (password only) is required for access to prevent unauthorized LLM usage.
+- A `default_language` setting affects the sentence page displayed after login or upon accessing the path `/`.
+- A single global favorites list for sentences and lemmas.
 
 ### Credential Management
 
-- User records are stored in the SQLite database (`users` table).
-- Users are created, updated, or deleted via a command-line admin script (not via the web UI).
+- Settings are stored in the SQLite database (`settings` table, single row).
+- Password and default language are set via a command-line admin script (not via the web UI).
 - There is no self-service registration or password reset.
 
 ### Password Storage
 
-- Passwords are hashed with a salted algorithm (e.g., PBKDF2-SHA256 via Werkzeug).
-- The `users` table stores: `username`, `password_hash`, `default_language`.
+- Password is hashed with a salted algorithm (e.g., PBKDF2-SHA256 via Werkzeug).
+- The `settings` table stores: `password_hash`, `default_language`.
 
 ### Session Policy
 
@@ -124,7 +123,7 @@ The canonical dictionary form of a token.
 
 ### Login Rate Limiting
 
-- Per-username exponential backoff on failed login attempts.
+- Exponential backoff on failed login attempts.
 - **Storage**: In-memory (resets on server restart).
 - Initial delay: 5 seconds after first failure.
 - Multiplier: 2x on each subsequent failure.
@@ -139,8 +138,8 @@ The canonical dictionary form of a token.
 ### Login Page
 
 - **URL**: `/login`
-- Displays a username/password form.
-- On success, redirects to `/<default_language>/` (the user's default language sentence list).
+- Displays a password-only form.
+- On success, redirects to `/<default_language>/` (the configured default language sentence list).
 - On failure, redisplays with an error message.
 
 ### Sentence List Page
@@ -154,7 +153,7 @@ The canonical dictionary form of a token.
   - If some feeds fail, continue with others; the list refreshes without explicit feedback.
 - Each row shows:
   - The full sentence text (no truncation).
-  - A filled star icon if the sentence is in the user's favorites.
+  - A filled star icon if the sentence is favorited.
   - Parenthesized access count (omit if access count is zero; never-accessed sentences show no count).
 - Sorted by insert time, newest first.
 - No pagination or search/filter. All sentences displayed.
@@ -241,13 +240,13 @@ The canonical dictionary form of a token.
 
 - **URL**: `/`
 - Redirects to `/login` if not logged in.
-- Otherwise redirects to `/<default_language>/` (the user's default language).
+- Otherwise redirects to `/<default_language>/` (the configured default language).
 
 ### Favorites Page
 
 - **URL**: `/favorites`
 - Accessible via header navigation link.
-- Displays a unified list of the user's favorited items across all languages.
+- Displays a unified list of favorited items across all languages.
 - **Layout**:
   - **Sentences section**: List of favorited sentences, sorted by when favorited (newest first).
   - **Lemmas section**: List of favorited lemmas, sorted by when favorited (newest first).
@@ -279,7 +278,6 @@ The canonical dictionary form of a token.
 
 - Show language switcher only if multiple languages are configured in `feeds.yaml`.
 - Show favorites link.
-- No username display (app feels single-user).
 
 ---
 
@@ -290,18 +288,18 @@ The canonical dictionary form of a token.
 - Cache all LLM-generated content so pages render instantly on repeat visits.
 - Track access counts for sentences and lemmas.
 - Track processed RSS articles to avoid duplicates.
-- Store user credentials.
-- Store per-user favorites.
+- Store password and settings.
+- Store favorites.
 
 ### Tables (conceptual)
 
 | Table           | Key columns                                                                 |
 |-----------------|-----------------------------------------------------------------------------|
-| `users`         | `username`, `password_hash`, `default_language`                             |
+| `settings`      | `password_hash`, `default_language`                                         |
 | `sentences`     | `id`, `language`, `hash`, `text`, `gloss_json`, `proper_nouns_json`, `grammar_notes_json`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `lemmas`        | `id`, `language`, `normalized_lemma`, `translation`, `related_words_json`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `rss_articles`  | `feed_id`, `article_id`                                    |
-| `favorites`     | `id`, `username`, `item_type`, `item_id`, `created_at`                      |
+| `favorites`     | `id`, `item_type`, `item_id`, `created_at`                                  |
 
 ### Schema (DDL)
 
@@ -314,8 +312,8 @@ The database stores a versioning field to control cache invalidation:
 Cached content with mismatched `schema_version` is treated as a cache miss and regenerated on next access.
 
 ```sql
-CREATE TABLE IF NOT EXISTS users (
-  username TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS settings (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
   password_hash TEXT NOT NULL,
   default_language TEXT NOT NULL
 );
@@ -364,22 +362,19 @@ CREATE TABLE IF NOT EXISTS rss_articles (
 
 CREATE TABLE IF NOT EXISTS favorites (
   id INTEGER PRIMARY KEY,
-  username TEXT NOT NULL,
   item_type TEXT NOT NULL CHECK(item_type IN ('sentence', 'lemma')),
   item_id INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
-  UNIQUE(username, item_type, item_id),
-  FOREIGN KEY (username) REFERENCES users(username) ON DELETE CASCADE
+  UNIQUE(item_type, item_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_favorites_username
-  ON favorites(username, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_favorites_created_at
+  ON favorites(created_at DESC);
 ```
 
 Foreign keys are not required for token-to-lemma relationships because tokenization and lemma links are stored inside cached JSON payloads.
 
 **Cascade delete behavior**:
-- When a user is deleted, their favorites are automatically deleted (ON DELETE CASCADE).
 - When a sentence or lemma is deleted, the application must first delete any favorites pointing to it (DELETE FROM favorites WHERE item_type=? AND item_id=?).
 
 ---
@@ -488,7 +483,7 @@ All environment variables are required. The app will fail to start if `DATABASE_
 ### Setup Steps
 
 1. Create/initialize the SQLite database via `init_db.py`.
-2. Create at least one user via the admin CLI.
+2. Set password and default language via admin CLI (`cli set-password`, `cli set-language`).
 3. Configure `feeds.yaml` with at least one RSS feed.
 4. Set environment variables.
 5. Start the Flask server (startup validates OpenAI API key).
@@ -743,13 +738,11 @@ The SQLite schema is defined in the Data Storage section.
 
 ### Admin CLI
 
-A unified CLI script named `cli` manages users and sentences:
+A unified CLI script named `cli` manages settings and sentences:
 
-**User management:**
-- `cli users list`
-- `cli users create --username <username> --password <password> --default-language <lang>`
-- `cli users update --username <username> [--password <password>] [--default-language <lang>]`
-- `cli users delete --username <username>`
+**Settings:**
+- `cli set-password <password>`
+- `cli set-language <lang>`
 
 **Sentence management:**
 - `cli sentences add --text <text> --language <lang>` (both arguments required)
