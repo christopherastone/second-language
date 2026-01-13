@@ -26,12 +26,13 @@ A local web application for learning a foreign language (initially Slovenian) ai
 | Component        | Technology                          |
 |------------------|-------------------------------------|
 | Back-end         | Flask (Python)                      |
-| Front-end        | HTML, CSS, HTMX                     |
+| Front-end        | HTML, Tailwind CSS, HTMX            |
 | Database         | SQLite                              |
 | Program / deps   | `uv` (`pyproject.toml`)             |
 | Forms / CSRF     | Flask-WTF (CSRFProtect)             |
 | RSS fetching     | `requests` + `feedparser`           |
 | Content generation | LLM (OpenAI; default model `gpt-5-nano`) |
+| CSS build        | Tailwind CSS standalone CLI         |
 
 ---
 
@@ -65,6 +66,7 @@ A clickable unit within a displayed sentence.
   - Display uses the original surface string as returned by the LLM.
   - Database lookups assume stored sentence text and lemma identifiers are already normalized.
 - **Punctuation tokens**: Displayed but not clickable; have no associated lemma.
+- **Loanword tokens**: Foreign loanwords (e.g., English words in Slovenian headlines) are displayed but not lemmatized. The LLM marks these with `is_loanword: true`; they appear with empty gloss area below.
 
 
 ### Lemma
@@ -98,6 +100,7 @@ The canonical dictionary form of a token.
 - The app does **not** track individual user progress; cached content and access counts are shared globally across all users.
 - Multiple user accounts may exist, but they share a single content database.
 - Each user has a `default_language` preference, which affects the sentence page displayed after login or upon accessing the path `/`.
+- Each user has their own favorites list (sentences and lemmas). Favorites are per-user, not shared globally.
 
 ### Credential Management
 
@@ -117,6 +120,16 @@ The canonical dictionary form of a token.
 - Cookies are `HttpOnly`, `Secure` when served over HTTPS (disabled for local HTTP), and scoped as a host-only cookie.
 - Every request (except `/login`) requires a valid session; unauthenticated requests redirect to `/login`.
 - CSRF protection is enabled for login and all state-changing actions.
+- No explicit logout functionality. Sessions only end when the browser clears cookies or the server secret key changes.
+
+### Login Rate Limiting
+
+- Per-username exponential backoff on failed login attempts.
+- Initial delay: 5 seconds after first failure.
+- Multiplier: 2x on each subsequent failure.
+- Maximum delay: 60 seconds.
+- Reset: Delay counter resets to zero on successful login.
+- Decay: Delay counter decays to zero after 1 hour of no login attempts for that username.
 
 ---
 
@@ -132,68 +145,94 @@ The canonical dictionary form of a token.
 ### Sentence List Page
 
 - **URL**: `/<lang>/` (e.g., `/sl/`)
+- Returns 404 if the language code has no configured feeds in `feeds.yaml`.
 - Lists sentences in the database for the given language.
 - Includes an "Update" button above the list that fetches new RSS headlines for the current language from enabled feeds and inserts any new sentences.
   - Update is a state-changing action and must be CSRF-protected.
   - Update does not push a new browser history entry and does not change the URL.
+  - If some feeds fail, continue with others; the list refreshes without explicit feedback.
 - Each row shows:
-  - The sentence text.
-  - Parenthesized access count (number of times the sentence detail page was fully loaded).
+  - The full sentence text (no truncation).
+  - A filled star icon if the sentence is in the user's favorites.
+  - Parenthesized access count (omit if access count is zero; never-accessed sentences show no count).
 - Sorted by insert time, newest first.
-- Limited to 100 sentences (no pagination).
+- Limited to 100 sentences (no pagination, no search/filter).
 - Clicking a sentence navigates to its detail page. Words/lemmas are not separately clickable.
 
 ### Sentence Detail Page
 
 - **URL**: `/<lang>/sentence/<hash_slug>`
+- If the hash does not exist in the database, redirect to the sentence list page for that language.
 - **Layout** (top to bottom):
 
   1. **Glossed sentence** (bold):
-     - Each token displayed with its gloss directly below (interlinear style, inline flow).
-     - Gloss = literal translation + morphological tags.
+     - Each token displayed as an inline-block with its gloss directly below (interlinear style).
+     - Token blocks are separated by horizontal spacing only (no borders or backgrounds).
+     - Sentence wraps naturally to multiple lines if long.
+     - Gloss text is the same size as the token but uses muted color/lighter weight.
+     - Gloss format: `translation.tag1.tag2` (Leipzig abbreviations, dot-separated, tags after translation, e.g., `to run.3.sg`).
+     - If a word has no Leipzig tags (e.g., simple prepositions), show translation only without POS annotation.
      - Allowable Leipzig Glossing tags: `1`, `2`, `3`, `sg`, `du`, `pl`, `nom`, `gen`, `dat`, `acc`, `ins`, `loc`, `refl`, `m`, `f`, `n`.
-     - Each word token links to its lemma page. Punctuation tokens are not clickable.
+     - Word tokens link to their lemma page but have no visual click indication (no underline); user discovers clickability by clicking.
+     - Punctuation tokens have the same inline-block layout but with empty gloss row.
+     - Loanword tokens (foreign words not lemmatized) display with empty gloss area below.
 
   2. **Proper noun definitions** (optional):
      - A list of proper nouns in the sentence unfamiliar to most Americans.
          - Exclude globally famous proper nouns like `Paris` or `Mozart`
          - Include all local figures, places, or organizations
          - Include famous places if their English name is different, e.g., `Vienna` is famous, but its Slovenian name `Dunaj` should be explained.
+         - Detect proper nouns in any grammatical case form; show nominative form in the definition.
      - Each entry: proper noun (nominative case) + brief definition/explanation.
+     - Plain text display with simple heading (no boxes or backgrounds).
+     - Per-sentence (not cached/shared across sentences).
      - Omitted if the sentence contains no unfamiliar proper nouns.
 
   3. **Grammar notes** (optional):
      - Surprising grammar features for an English speaker.
      - Excludes basics that apply to most languages (e.g., adjective gender agreement, verb number agreement).
      - Focuses on tense/mood/aspect differences, unusual word order, constructions without direct English equivalents.
+     - Direct explanations without English comparisons (not "Unlike English...").
+     - Plain text display with simple heading (no boxes or backgrounds).
      - Omitted if the sentence contains only straightforward grammar.
 
-  4. **Regenerate controls**:
-     - A dropdown to select an LLM model.
-     - A button labeled "Regenerate".
-     - A label showing which model generated the current content.
-     - Clicking "Regenerate" re-generates all content for the page, replaces the cached data, and reloads. No history is kept.
+  4. **Action controls** (grouped together):
+     - **Favorite toggle**: Clickable star icon that fills when favorited. HTMX in-place update (no history push).
+     - **Regenerate controls**:
+       - A dropdown to select an LLM model (shows all three: nano/mini/gpt-5). Session remembers last selected model.
+       - A button labeled "Regenerate" (disabled with text "Regenerating..." during LLM call).
+       - A label showing which model generated the current content.
+       - Clicking "Regenerate" re-generates all content for the page, replaces the cached data, and reloads. No history is kept. No cooldown.
+     - **Delete button**: Immediately deletes the sentence (no confirmation dialog), keeps article in `rss_articles` (won't re-import), redirects to sentence list.
 
+- **LLM failure**: If generation fails after retries, show error message with "Try again" button and model selector. Sentence text remains visible.
 - **Access counting**: Each full page load (not HTMX partial) increments the sentence's access count by 1.
+- **Ambiguity handling**: LLM picks the single most contextually appropriate lemma when a word could have multiple analyses.
 
 ### Lemma Detail Page
 
 - **URL**: `/<lang>/lemma/<normalized_lemma>` (URL-encoded)
 - **Lookup**: The server URL-decodes and normalizes the lemma segment before looking up `lemmas.normalized_lemma`.
+- **Lemma creation**: Lemma records are created only when the page is first accessed (not eagerly when referenced).
+- **Content generation**: If the lemma has no cached content, generate inline with loading state, then display.
 - **Layout** (top to bottom):
 
   1. **Lemma and translation**:
      - The lemma (bold).
-     - A concise English translation.
+     - English translation listing 2-3 common meanings if the word is polysemous.
 
   2. **Related words** (optional, max 8):
-     - A list of related words/phrases with translations.
+     - A list of any linguistically relevant related words/phrases with translations (not restricted to words in the database).
      - Each entry includes a short note explaining why it is related (e.g., etymological relation, false friend, near-synonym distinction).
      - Entries may not always be lemmas in the dictionary sense; each entry includes a `normalized_lemma` link target and links to that lemma page.
+     - Related word links use subtle styling (match surrounding text, subtle underline on hover).
+     - Clicking a related word navigates to its lemma page (full navigation, pushes history).
      - Excludes inflected/conjugated forms of the same lemma.
      - May be shorter or omitted if no good candidates.
 
-  3. **Regenerate controls**: Same as sentence detail page.
+  3. **Action controls** (grouped together):
+     - **Favorite toggle**: Clickable star icon that fills when favorited. HTMX in-place update (no history push).
+     - **Regenerate controls**: Same as sentence detail page.
 
 - **Access counting**: Each full page load increments the lemma's access count by 1.
 
@@ -202,6 +241,44 @@ The canonical dictionary form of a token.
 - **URL**: `/`
 - Redirects to `/login` if not logged in.
 - Otherwise redirects to `/<default_language>/` (the user's default language).
+
+### Favorites Page
+
+- **URL**: `/favorites`
+- Accessible via header navigation link.
+- Displays a unified list of the user's favorited items across all languages.
+- **Layout**:
+  - **Sentences section**: List of favorited sentences, sorted by when favorited (newest first).
+  - **Lemmas section**: List of favorited lemmas, sorted by when favorited (newest first).
+- Clicking an item navigates to its detail page (full navigation).
+
+---
+
+## UI & Styling
+
+### Branding
+
+- **App name**: "Second Language" (displayed in header and page titles).
+- **Favicon**: Include a simple favicon.
+- **Logo**: Simple logo/app name in header.
+- **Footer**: Display app version (read from `pyproject.toml`).
+
+### CSS Framework
+
+- Tailwind CSS using the standalone CLI (not npm).
+- Single light theme only (no dark mode).
+
+### Loading States
+
+- Use native browser loading indicators only.
+- No custom spinners or progress bars during navigation.
+- Regenerate button shows "Regenerating..." text while disabled during LLM calls.
+
+### Navigation Header
+
+- Show language switcher only if multiple languages are configured in `feeds.yaml`.
+- Show favorites link.
+- No username display (app feels single-user).
 
 ---
 
@@ -213,6 +290,7 @@ The canonical dictionary form of a token.
 - Track access counts for sentences and lemmas.
 - Track processed RSS articles to avoid duplicates.
 - Store user credentials.
+- Store per-user favorites.
 
 ### Tables (conceptual)
 
@@ -222,6 +300,7 @@ The canonical dictionary form of a token.
 | `sentences`     | `id`, `language`, `hash`, `text`, `gloss_json`, `proper_nouns_json`, `grammar_notes_json`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `lemmas`        | `id`, `language`, `normalized_lemma`, `translation`, `related_words_json`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `rss_articles`  | `feed_id`, `article_id`                                    |
+| `favorites`     | `id`, `username`, `item_type`, `item_id`, `created_at`                      |
 
 ### Schema (DDL)
 
@@ -231,7 +310,7 @@ The database stores a versioning field to control cache invalidation:
 
 - `schema_version` (integer): bumped when the JSON structure changes.
 
-Cached content with mismatched `schema_version` is treated as a cache miss and regenerated on next access.
+Cached content with mismatched `schema_version` is treated as a cache miss and regenerated lazily on next access.
 
 ```sql
 CREATE TABLE IF NOT EXISTS users (
@@ -281,6 +360,19 @@ CREATE TABLE IF NOT EXISTS rss_articles (
   article_id TEXT NOT NULL,
   PRIMARY KEY(feed_id, article_id)
 );
+
+CREATE TABLE IF NOT EXISTS favorites (
+  id INTEGER PRIMARY KEY,
+  username TEXT NOT NULL,
+  item_type TEXT NOT NULL CHECK(item_type IN ('sentence', 'lemma')),
+  item_id INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(username, item_type, item_id),
+  FOREIGN KEY (username) REFERENCES users(username)
+);
+
+CREATE INDEX IF NOT EXISTS idx_favorites_username
+  ON favorites(username, created_at DESC);
 ```
 
 Foreign keys are not required for token-to-lemma relationships because tokenization and lemma links are stored inside cached JSON payloads.
@@ -294,18 +386,23 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
 - RSS headlines are fetched only when the user clicks the "Update" button on the sentence list page for a language.
 - The update operation fetches headlines from configured, enabled feeds for that language.
 - RSS fetching uses `requests` for HTTP and `feedparser` for parsing.
+- If some feeds fail during update, continue with remaining feeds (partial failure handling).
 - For each new article (not previously seen):
   1. Extract headline text.
   2. Treat the headline text as one logical sentence.
-  3. Normalize the sentence.
-  4. Insert the sentence into the `sentences` table (content generated lazily on first access).
+  3. Process the headline: decode HTML entities (`&amp;`, `&quot;`, etc.), strip editorial markers (`[VIDEO]`, `[FOTO]`, etc.) and truncation markers (`...`).
+  4. Normalize the sentence (Unicode NFKC, collapse whitespace, trim).
+  5. Skip headlines that become empty after processing.
+  6. Insert the sentence into the `sentences` table (content generated lazily on first access).
 
 ### Feed Configuration
 
 - Feeds are defined in a configuration file `feeds.yaml`.
 - Each feed specifies: URL, language code, enabled/disabled flag.
+- Feed management is via manual YAML editing only (no CLI commands for feeds).
 - Articles are deduplicated by the RSS item's `id`/GUID field as returned by the RSS parser.
   - If the feed does not provide an `id`/GUID, fall back to a hash of the item's link URL.
+- Deleting a sentence keeps its article_id in `rss_articles` (sentence won't be re-imported).
 
 ---
 
@@ -314,11 +411,18 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
 ### Supported Models
 
 - OpenAI models: `gpt-5-nano` (default), `gpt-5-mini`, and `gpt-5`.
+- Model selector always shows all three models (API will reject if not accessible).
 
 ### Configuration
 
 - API keys provided via environment variables: `OPENAI_API_KEY`.
 - Model selection stored per cached page (so regeneration can use a different model).
+- Session remembers last selected model for convenience.
+
+### Startup Validation
+
+- On app startup, make a test API call to verify the OpenAI API key is valid.
+- If the test call fails, exit with a clear error message (app won't function without valid key).
 
 ### Request Handling
 
@@ -326,23 +430,30 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
 - Retries: up to 2 retries on transient errors (429, 500, 502, 503, 504).
 - Malformed output: if LLM returns invalid JSON, attempt one retry; if still invalid, display an error and do not cache.
 
+### Failure Display
+
+- On LLM failure after retries, show error message with "Try again" button alongside model selector.
+- Original content (sentence text, lemma) remains visible during error state.
+
 ### Cost Controls
 
 - No cost control.
+- No rate limiting or cooldown on regeneration for authenticated users.
 
 ---
 
 ## Navigation and Browser History
 
-- All page navigations (sentence list → sentence detail → lemma detail) must push to browser history.
+- All page navigations (sentence list → sentence detail → lemma detail → related lemma) must push to browser history.
 - The browser back button must return to the previous page correctly.
 - HTMX is used for interactivity; use `hx-push-url="true"` or full-page navigations to ensure history works.
 
-### Regeneration behavior
+### HTMX partial updates (no history push)
 
-- Regeneration is an HTMX partial update that replaces page content in place.
-- Regeneration does not push a new browser history entry and does not change the URL.
-- Regeneration does not increment access count.
+The following actions use HTMX partial updates that do not push browser history:
+- Regeneration (replaces page content in place, does not increment access count).
+- Favorite toggle (updates star icon in place).
+- RSS Update button on sentence list (refreshes list content).
 
 ---
 
@@ -355,18 +466,21 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
 
 ### Environment Variables
 
-| Variable            | Purpose                                      |
-|---------------------|----------------------------------------------|
-| `SECRET_KEY`        | Flask session signing key                    |
-| `DATABASE_PATH`     | Path to SQLite database file                 |
-| `OPENAI_API_KEY`    | OpenAI API key                               |
+| Variable            | Purpose                                      | Required |
+|---------------------|----------------------------------------------|----------|
+| `SECRET_KEY`        | Flask session signing key                    | Yes      |
+| `DATABASE_PATH`     | Path to SQLite database file                 | Yes (no default) |
+| `OPENAI_API_KEY`    | OpenAI API key                               | Yes      |
+
+All environment variables are required. The app will fail to start if `DATABASE_PATH` is not set.
 
 ### Setup Steps
 
 1. Create/initialize the SQLite database via `init_db.py`.
 2. Create at least one user via the admin CLI.
-3. Set environment variables.
-4. Start the Flask server.
+3. Configure `feeds.yaml` with at least one RSS feed.
+4. Set environment variables.
+5. Start the Flask server (startup validates OpenAI API key).
 
 ---
 
@@ -395,7 +509,8 @@ Top-level object:
 - `leading` (string): either `""` or `" "` (or other whitespace) so that concatenating `leading + surface` for all tokens reconstructs `sentence_text`
 - `surface` (string)
 - `is_punct` (boolean)
-- If `is_punct` is `false`:
+- `is_loanword` (boolean, optional): true for foreign loanwords that should not be lemmatized
+- If `is_punct` is `false` and `is_loanword` is not `true`:
   - `lemma` (string)
   - `pos` (string)
   - `gloss` (string)
@@ -454,6 +569,10 @@ JSON Schema:
           "is_punct": {
             "type": "boolean"
           },
+          "is_loanword": {
+            "type": "boolean",
+            "description": "True for foreign loanwords that should not be lemmatized"
+          },
           "lemma": {
             "type": "string",
             "minLength": 1
@@ -494,19 +613,14 @@ JSON Schema:
         "allOf": [
           {
             "if": {
-              "properties": { "is_punct": { "const": false } },
+              "properties": {
+                "is_punct": { "const": false },
+                "is_loanword": { "not": { "const": true } }
+              },
               "required": ["is_punct"]
             },
             "then": {
               "required": ["lemma", "pos", "gloss", "tags"]
-            },
-            "else": {
-              "allOf": [
-                { "not": { "required": ["lemma"] } },
-                { "not": { "required": ["pos"] } },
-                { "not": { "required": ["gloss"] } },
-                { "not": { "required": ["tags"] } }
-              ]
             }
           }
         ]
@@ -627,16 +741,22 @@ JSON Schema:
 
 The SQLite schema is defined in the Data Storage section.
 
-### Admin CLI for users
+### Admin CLI
 
-Users are managed via a CLI script named `users` with the following commands:
+A unified CLI script named `cli` manages users and sentences:
 
-- `users list`
-- `users create --username <username> --password <password> --default-language <lang>`
-- `users update --username <username> [--password <password>] [--default-language <lang>]`
-- `users delete --username <username>`
+**User management:**
+- `cli users list`
+- `cli users create --username <username> --password <password> --default-language <lang>`
+- `cli users update --username <username> [--password <password>] [--default-language <lang>]`
+- `cli users delete --username <username>`
 
-`default_language` validation: lowercase two-letter language code matching `^[a-z]{2}$`. It can be changed via `users update`.
+**Sentence management:**
+- `cli sentences add --text <text> --language <lang>` (both arguments required)
+
+**Validation:**
+- `default_language`: lowercase two-letter language code matching `^[a-z]{2}$` with feeds configured for that language in `feeds.yaml`.
+- `--language` for sentences: must have feeds configured for that language.
 
 ### `feeds.yaml` format
 
