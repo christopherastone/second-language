@@ -1,0 +1,20 @@
+[project]
+name = "second-language"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "flask>=3.0.0",
+  "flask-wtf>=1.2.1",
+  "requests>=2.32.0",
+  "feedparser>=6.0.11",
+  "openai>=1.40.0",
+  "pyyaml>=6.0.1",
+  "jsonschema>=4.22.0",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["app", "config", "db", "llm", "rss", "normalization"]

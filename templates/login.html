@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-md mx-auto bg-white border border-slate-200 rounded-lg p-6 shadow-sm">
+  <h1 class="text-xl font-semibold mb-4">Login</h1>
+  {% if error %}
+    <div class="text-sm text-red-600 mb-3">{{ error }}</div>
+  {% endif %}
+  <form method="post" action="{{ url_for('login') }}" class="space-y-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <div>
+      <label class="block text-sm text-slate-600 mb-1" for="password">Password</label>
+      <input
+        class="w-full border border-slate-300 rounded px-3 py-2"
+        type="password"
+        name="password"
+        id="password"
+        required
+      />
+    </div>
+    <button class="bg-slate-900 text-white rounded px-4 py-2" type="submit">Sign in</button>
+  </form>
+</div>
+{% endblock %}

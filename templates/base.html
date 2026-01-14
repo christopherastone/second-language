@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token() }}" />
+    <title>{{ title if title else app_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='output.css') }}" />
+    <link rel="icon" href="{{ url_for('favicon') }}" />
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+  </head>
+  <body class="min-h-screen bg-slate-50 text-slate-900 {{ 'hide-glosses' if not show_glosses else '' }}">
+    <div class="max-w-5xl mx-auto px-6 py-6">
+      <header class="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div class="text-2xl font-semibold">
+          <a href="{{ url_for('sentence_list', lang=default_language) }}">{{ app_name }}</a>
+        </div>
+        {% if session.get('logged_in') %}
+        <nav class="flex flex-wrap items-center gap-4 text-sm">
+          {% if languages|length > 1 %}
+          <div class="flex items-center gap-2">
+            <span class="text-slate-500">Languages:</span>
+            {% for lang in languages %}
+              <a class="underline hover:no-underline" href="{{ url_for('sentence_list', lang=lang) }}">{{ lang }}</a>
+            {% endfor %}
+          </div>
+          {% endif %}
+          <a class="underline hover:no-underline" href="{{ url_for('favorites') }}">Favorites</a>
+          {% include "partials/gloss_toggle.html" %}
+        </nav>
+        {% endif %}
+      </header>
+
+      <main>
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="mt-12 text-xs text-slate-500">
+        Version {{ app_version }}
+      </footer>
+    </div>
+
+    <script>
+      document.addEventListener("htmx:configRequest", function (event) {
+        const token = document.querySelector("meta[name='csrf-token']");
+        if (token) {
+          event.detail.headers["X-CSRFToken"] = token.getAttribute("content");
+        }
+      });
+
+      document.addEventListener("htmx:oobAfterSwap", function (event) {
+        if (event.target && event.target.id === "gloss-class") {
+          const show = event.target.dataset.showGlosses === "1";
+          document.body.classList.toggle("hide-glosses", !show);
+        }
+      });
+    </script>
+  </body>
+</html>

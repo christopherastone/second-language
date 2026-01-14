@@ -31,7 +31,7 @@ A local web application for learning a foreign language (initially Slovenian) ai
 | Program / deps   | `uv` (`pyproject.toml`)             |
 | Forms / CSRF     | Flask-WTF (CSRFProtect)             |
 | RSS fetching     | `requests` + `feedparser`           |
-| Content generation | LLM (OpenAI; default model `gpt-5-nano`) |
+| Content generation | LLM (OpenAI; default model `gpt-4o`) |
 | CSS build        | Tailwind CSS standalone CLI         |
 
 ---
@@ -59,14 +59,13 @@ A clickable unit within a displayed sentence.
 
 - **Tokenization**:
   - Tokenization is produced by the LLM as part of sentence page generation, not by a local rule-based tokenizer (e.g., NLTK or spaCy).
-  - The LLM must return tokens in reading order such that concatenating token surfaces (inserting appropriate whitespace between tokens) reconstructs the original sentence text.
+  - The LLM must return tokens in reading order; the UI renders tokens with a single space between them for readability.
   - The LLM must return multi-word proper nouns as a single token spanning internal whitespace (e.g., `New York`).
   - The LLM must return punctuation as separate tokens.
 - **Surface vs normalized form**:
   - Display uses the original surface string as returned by the LLM.
   - Database lookups assume stored sentence text and lemma identifiers are already normalized.
 - **Punctuation tokens**: Displayed but not clickable; have no associated lemma.
-- **Loanword tokens**: Foreign loanwords (e.g., English words in Slovenian headlines) are displayed but not lemmatized. The LLM marks these with `is_loanword: true`; they appear with empty gloss area below.
 
 
 ### Lemma
@@ -171,12 +170,11 @@ The canonical dictionary form of a token.
      - Sentence wraps naturally to multiple lines if long.
      - Gloss text is the same size as the token but uses muted color/lighter weight.
      - Gloss visibility follows the session "Show glosses" setting; when disabled, gloss text is hidden via CSS but tokens remain visible and clickable.
-     - Gloss format: `translation.tag1.tag2` (Leipzig abbreviations, dot-separated, tags after translation, e.g., `to run.3.sg`). The UI composes this from `gloss` (translation) + `tags`.
+    - Gloss format: `translation.tag1.tag2` (Leipzig abbreviations, dot-separated, tags after translation, e.g., `to run.3.sg`). The UI composes this from `translation` + `tags`.
      - If a word has no Leipzig tags (e.g., simple prepositions), show translation only without POS annotation.
-     - Allowable Leipzig Glossing tags: `1`, `2`, `3`, `sg`, `du`, `pl`, `nom`, `gen`, `dat`, `acc`, `ins`, `loc`, `refl`, `m`, `f`, `n`.
+- Allowable Leipzig Glossing tags: `1`, `2`, `3`, `sg`, `du`, `pl`, `nom`, `gen`, `dat`, `acc`, `ins`, `loc`, `refl`.
      - Word tokens link to their lemma page; show underline on hover (standard link behavior).
      - Punctuation tokens have the same inline-block layout but with empty gloss row.
-     - Loanword tokens (foreign words not lemmatized) display with empty gloss area below.
 
   2. **Proper noun definitions** (optional):
      - A list of proper nouns in the sentence unfamiliar to most Americans.
@@ -308,7 +306,7 @@ The canonical dictionary form of a token.
 | Table           | Key columns                                                                 |
 |-----------------|-----------------------------------------------------------------------------|
 | `settings`      | `password_hash`, `default_language`                                         |
-| `sentences`     | `id`, `language`, `hash`, `text`, `gloss_json`, `proper_nouns_json`, `grammar_notes_json`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
+| `sentences`     | `id`, `language`, `hash`, `text`, `gloss_json`, `proper_nouns_json`, `grammar_notes_json`, `natural_translation`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `sentence_lemmas` | `language`, `normalized_lemma`, `sentence_id`                             |
 | `lemmas`        | `id`, `language`, `normalized_lemma`, `translation`, `related_words_json`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `rss_articles`  | `article_id`                                               |
@@ -340,6 +338,7 @@ CREATE TABLE IF NOT EXISTS sentences (
   gloss_json TEXT,
   proper_nouns_json TEXT,
   grammar_notes_json TEXT,
+  natural_translation TEXT,
   model_used TEXT,
   schema_version INTEGER NOT NULL,
   access_count INTEGER NOT NULL DEFAULT 0,
@@ -419,10 +418,10 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
   3. Process the headline: decode HTML entities (`&amp;`, `&quot;`, etc.), strip editorial markers (`[VIDEO]`, `[FOTO]`, etc.) and truncation markers (`...`).
   4. Normalize the sentence (Unicode NFKC, collapse whitespace, trim).
   5. Skip headlines that become empty after processing.
-  6. Call LLM to generate content (gloss, proper nouns, grammar notes).
+  6. Call LLM to generate content (translations, proper nouns, grammar notes).
   7. If LLM fails, skip that headline (do not add to database or deduplication table).
   8. Insert the sentence into the `sentences` table.
-  9. Populate `sentence_lemmas` for that sentence from the generated tokens (unique per sentence; skip punctuation and loanwords).
+  9. Populate `sentence_lemmas` for that sentence from the generated tokens (unique per sentence; skip punctuation).
   10. Insert at most 5 new sentences per update (configurable constant); stop after the limit and leave remaining headlines for a future update.
 
 **Note**: Content is generated eagerly at import time, not lazily on first access. This ensures all sentences in the database have complete content.
@@ -446,7 +445,7 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
 
 ### Supported Models
 
-- OpenAI models: `gpt-5-nano` (default), `gpt-5-mini`, and `gpt-5`.
+- OpenAI models: `gpt-5-nano`, `gpt-5-mini`, `gpt-5`, `gpt-4.1`, and `gpt-4o` (default).
 - Model selector always shows all three models (API will reject if not accessible).
 
 ### Configuration
@@ -505,17 +504,16 @@ The following actions use HTMX partial updates that do not push browser history:
 | Variable            | Purpose                                      | Required |
 |---------------------|----------------------------------------------|----------|
 | `SECRET_KEY`        | Flask session signing key                    | Yes      |
-| `DATABASE_PATH`     | Path to SQLite database file                 | Yes (no default) |
 | `OPENAI_API_KEY`    | OpenAI API key                               | Yes      |
 
-All environment variables are required. The app will fail to start if `DATABASE_PATH` is not set.
+All environment variables listed above are required. The database path is hard-coded to `./data/app.db`.
 
 ### Setup Steps
 
 1. Create/initialize the SQLite database via `init_db.py`.
 2. Set password and default language via admin CLI (`cli set-password`, `cli set-language`).
 3. Configure `feeds.yaml` with at least one RSS feed.
-4. Set environment variables.
+4. Set required environment variables (`SECRET_KEY`, `OPENAI_API_KEY`).
 5. Start the Flask server (startup validates OpenAI API key).
 
 ---
@@ -534,23 +532,20 @@ Top-level object:
 
 - `sentence_text` (string): must equal the normalized sentence text stored in `sentences.text`.
   - This intentionally duplicates the stored sentence string so cached payloads are self-contained and so the server can validate that the LLM output corresponds to the requested sentence.
+- `natural_english_translation` (string): fluent English translation of the sentence
 - `tokens` (array of `Token`)
 - `proper_nouns` (array of `ProperNoun`)
 - `grammar_notes` (array of `GrammarNote`)
-- `model_used` (string)
+ 
 
-Note: `schema_version` is stored in the database column only, not in the JSON payload.
+Note: `schema_version` and `model_used` are stored in database columns only, not in the JSON payload.
 
 `Token` object:
 
-- `leading` (string): either `""` or `" "` (or other whitespace) so that concatenating `leading + surface` for all tokens reconstructs `sentence_text`
 - `surface` (string)
-- `is_punct` (boolean)
-- `is_loanword` (boolean, optional): true for foreign loanwords that should not be lemmatized
-- If `is_punct` is `false` and `is_loanword` is not `true`:
+- If the `surface` contains at least one alphabetic character:
   - `lemma` (string)
-  - `pos` (string)
-- `gloss` (string): translation only; the UI appends tags for display
+- `translation` (string): translation only; the UI appends tags for display
   - `tags` (array of strings): subset of allowable Leipzig tags
 
 `ProperNoun` object:
@@ -573,10 +568,10 @@ JSON Schema:
   "additionalProperties": false,
   "required": [
     "sentence_text",
+    "natural_english_translation",
     "tokens",
     "proper_nouns",
-    "grammar_notes",
-    "model_used"
+    "grammar_notes"
   ],
   "properties": {
     "sentence_text": {
@@ -584,37 +579,26 @@ JSON Schema:
       "minLength": 1,
       "description": "Must equal the normalized sentence text stored in sentences.text"
     },
+    "natural_english_translation": {
+      "type": "string",
+      "minLength": 1
+    },
     "tokens": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["leading", "surface", "is_punct"],
+        "required": ["surface"],
         "properties": {
-          "leading": {
-            "type": "string",
-            "description": "Whitespace to place before surface; concatenating leading+surface for all tokens reconstructs sentence_text"
-          },
           "surface": {
             "type": "string",
             "minLength": 1
-          },
-          "is_punct": {
-            "type": "boolean"
-          },
-          "is_loanword": {
-            "type": "boolean",
-            "description": "True for foreign loanwords that should not be lemmatized"
           },
           "lemma": {
             "type": "string",
             "minLength": 1
           },
-          "pos": {
-            "type": "string",
-            "minLength": 1
-          },
-          "gloss": {
+          "translation": {
             "type": "string",
             "minLength": 1,
             "description": "Translation only; the UI appends tags for display"
@@ -622,36 +606,9 @@ JSON Schema:
           "tags": {
             "type": "array",
             "items": {
-              "type": "string",
-              "enum": [
-                "1",
-                "2",
-                "3",
-                "sg",
-                "du",
-                "pl",
-                "nom",
-                "gen",
-                "dat",
-                "acc",
-                "ins",
-                "loc",
-                "refl",
-                "m",
-                "f",
-                "n"
-              ]
+              "type": "string"
             }
           }
-        },
-        "if": {
-          "allOf": [
-            { "properties": { "is_punct": { "const": false } } },
-            { "not": { "properties": { "is_loanword": { "const": true } } } }
-          ]
-        },
-        "then": {
-          "required": ["lemma", "pos", "gloss", "tags"]
         }
       }
     },
@@ -679,10 +636,6 @@ JSON Schema:
         }
       }
     },
-    "model_used": {
-      "type": "string",
-      "minLength": 1
-    }
   }
 }
 ```
@@ -695,9 +648,9 @@ Top-level object:
 - `normalized_lemma` (string): already normalized; used for storage and URLs
 - `translation` (string)
 - `related_words` (array of `RelatedWord`, length <= 8)
-- `model_used` (string)
+ 
 
-Note: `schema_version` is stored in the database column only, not in the JSON payload.
+Note: `schema_version` and `model_used` are stored in database columns only, not in the JSON payload.
 
 `RelatedWord` object:
 
@@ -718,8 +671,7 @@ JSON Schema:
     "lemma",
     "normalized_lemma",
     "translation",
-    "related_words",
-    "model_used"
+    "related_words"
   ],
   "properties": {
     "lemma": {
@@ -750,10 +702,6 @@ JSON Schema:
         }
       }
     },
-    "model_used": {
-      "type": "string",
-      "minLength": 1
-    }
   }
 }
 ```

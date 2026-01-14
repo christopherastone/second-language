@@ -1,0 +1,21 @@
+<div id="sentence-list" class="space-y-3">
+  {% for sentence in sentences %}
+    <div class="flex items-start gap-3">
+      <div class="text-lg">
+        {% if sentence.is_favorite %}
+          <span aria-label="favorited">&#9733;</span>
+        {% else %}
+          <span aria-label="not favorited">&#9734;</span>
+        {% endif %}
+      </div>
+      <div>
+        <a class="underline hover:no-underline" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">{{ sentence.text }}</a>
+        {% if sentence.access_count > 0 %}
+          <span class="text-xs text-slate-500">({{ sentence.access_count }})</span>
+        {% endif %}
+      </div>
+    </div>
+  {% else %}
+    <div class="text-slate-500">No sentences yet.</div>
+  {% endfor %}
+</div>

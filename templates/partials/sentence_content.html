@@ -1,0 +1,114 @@
+<div id="sentence-content" class="space-y-6">
+  <div class="space-y-3">
+    {% if content %}
+      <div class="font-semibold leading-relaxed">
+        {% for token in content.tokens -%}
+          {% set is_punct = not (token.surface | has_alpha) %}
+          <span class="token-block">
+            {% if is_punct or token.lemma is not defined %}
+              <span class="block">{{ token.surface }}</span>
+            {% else %}
+              <a
+                class="block underline hover:no-underline"
+                href="{{ token.lemma | lemma_url(language) }}"
+              >{{ token.surface }}</a>
+            {% endif %}
+            {% if is_punct %}
+              <span class="gloss block text-slate-500 font-normal">&nbsp;</span>
+            {% else %}
+              <span class="gloss block text-slate-500 font-normal">
+                {% if token.tags %}
+                  {{ token.translation }}.{{ token.tags | join('.') }}
+                {% else %}
+                  {{ token.translation }}
+                {% endif %}
+              </span>
+            {% endif %}
+          </span>{% if not loop.last %} {% endif %}
+        {%- endfor %}
+      </div>
+      <div class="text-slate-700">
+        {{ content.natural_english_translation }}
+      </div>
+    {% else %}
+      <div class="text-lg font-semibold">{{ sentence.text }}</div>
+    {% endif %}
+  </div>
+
+  {% if content and content.proper_nouns %}
+    <div>
+      <h2 class="text-sm font-semibold text-slate-600 mb-2">Proper nouns</h2>
+      <ul class="space-y-2">
+        {% for item in content.proper_nouns %}
+          <li>
+            <span class="font-semibold">{{ item.nominative }}</span>: {{ item.definition }}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  {% if content and content.grammar_notes %}
+    <div>
+      <h2 class="text-sm font-semibold text-slate-600 mb-2">Grammar notes</h2>
+      <ul class="space-y-2">
+        {% for item in content.grammar_notes %}
+          <li>
+            <span class="font-semibold">{{ item.title }}</span>: {{ item.note }}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <div class="border-t border-slate-200 pt-4 space-y-3">
+    {% if error %}
+      <div class="text-sm text-red-600">{{ error }}</div>
+    {% endif %}
+
+    <div class="flex flex-wrap items-center gap-4">
+      {% set target_id = "sentence-favorite-" ~ sentence.id %}
+      {% set action = url_for('sentence_favorite', lang=language, hash_slug=sentence.hash) %}
+      {% include "partials/favorite_star.html" %}
+
+      <form
+        method="post"
+        action="{{ url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash) }}"
+        hx-post="{{ url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash) }}"
+        hx-target="#sentence-content"
+        hx-swap="outerHTML"
+        hx-push-url="false"
+        class="flex flex-wrap items-center gap-2"
+      >
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <label class="text-sm text-slate-600" for="sentence-model">Model</label>
+        <select
+          id="sentence-model"
+          name="model"
+          class="border border-slate-300 rounded px-2 py-1 text-sm"
+        >
+          {% for model in model_choices %}
+            <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
+          {% endfor %}
+        </select>
+        <button
+          type="submit"
+          class="bg-slate-900 text-white rounded px-3 py-1.5"
+          hx-on:htmx:beforeRequest="this.dataset.label=this.innerText; this.innerText='Regenerating...'; this.disabled=true;"
+          hx-on:htmx:afterRequest="this.disabled=false; this.innerText=this.dataset.label || 'Regenerate';"
+        >
+          {{ "Try again" if error else "Regenerate" }}
+        </button>
+      </form>
+
+      <div class="text-xs text-slate-500">
+        Generated with: {{ content.model_used if content else 'unknown' }}
+      </div>
+
+      <form method="post" action="{{ url_for('sentence_delete', lang=language, hash_slug=sentence.hash) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+        <button type="submit" class="text-sm text-red-700 underline">Delete</button>
+      </form>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+  <h1 class="text-xl font-semibold">Sentences ({{ language }})</h1>
+  <form
+    method="post"
+    action="{{ url_for('update_sentences', lang=language) }}"
+    hx-post="{{ url_for('update_sentences', lang=language) }}"
+    hx-target="#sentence-list"
+    hx-swap="outerHTML"
+    hx-push-url="false"
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <button class="bg-slate-900 text-white rounded px-3 py-1.5" type="submit">Update</button>
+  </form>
+</div>
+
+{% include "partials/sentence_list_inner.html" %}
+{% endblock %}

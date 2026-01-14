@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Package management**: `uv` with `pyproject.toml`
 - **Forms/CSRF**: Flask-WTF (CSRFProtect)
 - **RSS**: `requests` + `feedparser`
-- **LLM**: OpenAI API (default model: `gpt-5-nano`)
+- **LLM**: OpenAI API (default model: `gpt-4o`)
 
 ## Commands
 
@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 uv sync
 
 # Build Tailwind CSS
-./tailwindcss -i input.css -o static/output.css
+tailwindcss -i input.css -o static/output.css
 
 # Initialize database
 uv run python init_db.py
@@ -42,12 +42,12 @@ uv run gunicorn app:app
 
 ## Environment Variables
 
-All required (app fails to start if missing):
+Required (app fails to start if missing):
 
 | Variable | Purpose |
 |----------|---------|
 | `SECRET_KEY` | Flask session signing key |
-| `DATABASE_PATH` | Path to SQLite database file (no default) |
+| `DATABASE_PATH` | Not used (path is hard-coded to `./data/app.db`) |
 | `OPENAI_API_KEY` | OpenAI API key (validated via /models endpoint on startup) |
 
 ## Architecture
@@ -66,7 +66,7 @@ All required (app fails to start if missing):
 **Sentences (eager generation):**
 1. RSS headlines fetched via "Update" button on sentence list page
 2. Headlines processed: decode HTML entities, strip editorial markers `[VIDEO]`, normalize
-3. LLM generates content (gloss/grammar/proper nouns) immediately
+3. LLM generates content (translations/grammar/proper nouns) immediately
 4. Only sentences with successful LLM generation are inserted into database
 5. Failed generations are skipped (not added to database or dedup table)
 
@@ -78,7 +78,7 @@ All required (app fails to start if missing):
 ### Key Concepts
 
 - **Normalization**: Unicode NFKC, collapsed whitespace, trimmed. Applied to all sentences and lemmas before storage/lookup.
-- **Tokenization**: Produced by LLM (not local tokenizer). Multi-word proper nouns are single tokens. Loanwords marked with `is_loanword: true`.
+- **Tokenization**: Produced by LLM (not local tokenizer). Multi-word proper nouns are single tokens.
 - **Gloss format**: `translation.tag1.tag2` (Leipzig abbreviations, dot-separated, e.g., `to run.3.sg`)
 - **Schema versioning**: `schema_version` stored in database column only (not in JSON). Mismatches trigger regeneration.
 - **Access counting**: Full page loads (not HTMX partials) increment counters. Omit `(0)` on sentence list.
@@ -95,7 +95,7 @@ All required (app fails to start if missing):
 
 ### LLM Integration
 
-- Models: `gpt-5-nano` (default), `gpt-5-mini`, `gpt-5` (all shown in selector)
+- Models: `gpt-5-nano`, `gpt-5-mini`, `gpt-5`, `gpt-4.1`, `gpt-4o` (default; all shown in selector)
 - Startup: Call `/models` endpoint (free) to validate key, exit if invalid
 - Timeout: 60 seconds
 - Retries: up to 2 on transient errors (429, 5xx)

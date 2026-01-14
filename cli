@@ -1,0 +1,197 @@
+#!/usr/bin/env python
+import argparse
+import json
+import secrets
+from datetime import datetime, timezone
+
+from werkzeug.security import generate_password_hash
+
+from config import (
+    DEFAULT_MODEL,
+    LANGUAGE_RE,
+    SENTENCE_SCHEMA_VERSION,
+    is_language_valid,
+    load_feeds,
+)
+from llm import LLMOutputError, LLMRequestError, generate_sentence_content
+from normalization import hash_sentence, normalize_text
+
+import sqlite3
+
+
+def utc_now() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def get_db():
+    from config import get_database_path
+    from pathlib import Path
+
+    db_path = get_database_path()
+    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def ensure_language(lang: str, feeds: list[dict]) -> str:
+    language = lang.strip().lower()
+    if not LANGUAGE_RE.match(language):
+        raise SystemExit("Language must be a two-letter code (e.g., sl)")
+    if not is_language_valid(language, feeds):
+        raise SystemExit("Language is not configured in feeds.yaml")
+    return language
+
+
+def set_password(args, feeds):
+    password_hash = generate_password_hash(args.password)
+    db = get_db()
+    try:
+        row = db.execute("SELECT default_language FROM settings WHERE id = 1").fetchone()
+        if row:
+            db.execute(
+                "UPDATE settings SET password_hash = ? WHERE id = 1",
+                (password_hash,),
+            )
+        else:
+            default_language = feeds[0]["language"] if feeds else ""
+            if not default_language:
+                raise SystemExit("No languages available in feeds.yaml")
+            db.execute(
+                "INSERT INTO settings (id, password_hash, default_language) VALUES (1, ?, ?)",
+                (password_hash, default_language),
+            )
+        db.commit()
+    finally:
+        db.close()
+
+
+def set_language(args, feeds):
+    language = ensure_language(args.language, feeds)
+    db = get_db()
+    try:
+        row = db.execute("SELECT password_hash FROM settings WHERE id = 1").fetchone()
+        if row:
+            db.execute(
+                "UPDATE settings SET default_language = ? WHERE id = 1",
+                (language,),
+            )
+        else:
+            placeholder_password = generate_password_hash(secrets.token_urlsafe(32))
+            db.execute(
+                "INSERT INTO settings (id, password_hash, default_language) VALUES (1, ?, ?)",
+                (placeholder_password, language),
+            )
+        db.commit()
+    finally:
+        db.close()
+
+
+def add_sentence(args, feeds):
+    language = ensure_language(args.language, feeds)
+    text = normalize_text(args.text)
+    if not text:
+        raise SystemExit("Sentence text is empty after normalization")
+    sentence_hash = hash_sentence(text)
+
+    db = get_db()
+    try:
+        existing = db.execute(
+            "SELECT id FROM sentences WHERE language = ? AND hash = ?",
+            (language, sentence_hash),
+        ).fetchone()
+        if existing:
+            raise SystemExit("Sentence already exists")
+        try:
+            payload = generate_sentence_content(language, text, DEFAULT_MODEL)
+        except (LLMRequestError, LLMOutputError) as exc:
+            raise SystemExit(f"LLM generation failed: {exc}") from exc
+        created_at = utc_now()
+        db.execute(
+            """
+            INSERT INTO sentences (
+                language, hash, text, gloss_json, proper_nouns_json, grammar_notes_json,
+                natural_translation, model_used, schema_version, access_count, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            """,
+            (
+                language,
+                sentence_hash,
+                text,
+                json.dumps(payload["tokens"], ensure_ascii=False),
+                json.dumps(payload["proper_nouns"], ensure_ascii=False),
+                json.dumps(payload["grammar_notes"], ensure_ascii=False),
+                payload["natural_english_translation"],
+                payload["model_used"],
+                SENTENCE_SCHEMA_VERSION,
+                created_at,
+                created_at,
+            ),
+        )
+        sentence_id = db.execute(
+            "SELECT id FROM sentences WHERE language = ? AND hash = ?",
+            (language, sentence_hash),
+        ).fetchone()["id"]
+        db.execute("DELETE FROM sentence_lemmas WHERE sentence_id = ?", (sentence_id,))
+        seen: set[str] = set()
+        from normalization import token_has_alpha
+
+        for token in payload["tokens"]:
+            surface = token.get("surface", "")
+            if not token_has_alpha(surface):
+                continue
+            lemma = token.get("lemma")
+            if not lemma:
+                continue
+            normalized = normalize_text(lemma)
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            db.execute(
+                """
+                INSERT OR IGNORE INTO sentence_lemmas (language, normalized_lemma, sentence_id)
+                VALUES (?, ?, ?)
+                """,
+                (language, normalized, sentence_id),
+            )
+        db.commit()
+    finally:
+        db.close()
+
+
+def build_parser():
+    parser = argparse.ArgumentParser(description="Second Language admin CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    password_parser = subparsers.add_parser("set-password", help="Set login password")
+    password_parser.add_argument("password")
+
+    language_parser = subparsers.add_parser("set-language", help="Set default language")
+    language_parser.add_argument("language")
+
+    sentence_parser = subparsers.add_parser("sentences", help="Sentence management")
+    sentence_sub = sentence_parser.add_subparsers(dest="sentence_command", required=True)
+    add_parser = sentence_sub.add_parser("add", help="Add a sentence")
+    add_parser.add_argument("--text", required=True)
+    add_parser.add_argument("--language", required=True)
+
+    return parser
+
+
+def main():
+    feeds = load_feeds()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.command == "set-password":
+        set_password(args, feeds)
+    elif args.command == "set-language":
+        set_language(args, feeds)
+    elif args.command == "sentences":
+        if args.sentence_command == "add":
+            add_sentence(args, feeds)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,4 @@
+- id: slovenskenovice
+  url: https://www.slovenskenovice.si/rss
+  language: sl
+  enabled: true

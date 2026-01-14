@@ -1,0 +1,19 @@
+<div id="gloss-toggle">
+  <form
+    method="post"
+    action="{{ url_for('toggle_glosses') }}"
+    hx-post="{{ url_for('toggle_glosses') }}"
+    hx-target="#gloss-toggle"
+    hx-swap="outerHTML"
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <button type="submit" class="underline hover:no-underline">
+      Show glosses: {{ "On" if show_glosses else "Off" }}
+    </button>
+  </form>
+</div>
+<div
+  id="gloss-class"
+  data-show-glosses="{{ '1' if show_glosses else '0' }}"
+  hx-swap-oob="true"
+></div>
