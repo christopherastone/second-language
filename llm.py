@@ -38,6 +38,23 @@ SENTENCE_SCHEMA = {
                         "type": "array",
                         "items": {
                             "type": "string",
+                            "enum": [
+                                "1",
+                                "2",
+                                "3",
+                                "f",
+                                "sg",
+                                "du",
+                                "pl",
+                                "nom",
+                                "gen",
+                                "dat",
+                                "acc",
+                                "ins",
+                                "loc",
+                                "refl",
+                                "ptcp",
+                            ],
                         },
                     },
                 },
@@ -92,7 +109,29 @@ SENTENCE_SCHEMA_OUTPUT = {
                     "surface": {"type": "string"},
                     "lemma": {"type": "string"},
                     "translation": {"type": "string"},
-                    "tags": {"type": "array", "items": {"type": "string"}},
+                    "tags": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "1",
+                                "2",
+                                "3",
+                                "f",
+                                "sg",
+                                "du",
+                                "pl",
+                                "nom",
+                                "gen",
+                                "dat",
+                                "acc",
+                                "ins",
+                                "loc",
+                                "refl",
+                                "ptcp",
+                            ],
+                        },
+                    },
                 },
             },
         },
@@ -306,8 +345,6 @@ def request_raw_schema_text(
     client = get_client()
     start = time.monotonic()
     logger.info("LLM request started model=%s", model)
-    logger.info(system_prompt)
-    logger.info(user_prompt)
 
     def make_request(use_text_format: bool):
         params: dict[str, Any] = {
@@ -523,11 +560,9 @@ SENTENCE_SYSTEM_PROMPT = (
     "Include a natural_english_translation for the whole sentence. "
     "For non-punctuation tokens, include their lemma, their English translation, and relevant grammatical tags. "
     "The lemma is the dictionary form of the word, e.g., infinitive for verbs (including 'se' if reflexive), nominative for nouns, masculine singular for adjectives. "
-    "Translate helper verbs as AUX (instead of 'be' or 'to be') and participles as PTCP. "
-    "Tags must be lowercase and selected from this list only: "
-    "1, 2, 3, f, nsg, du, pl, nom, gen, dat, acc, ins, loc, refl, ptcp. "
+    "Translate helper verbs as AUX (instead of 'be' or 'to be'). "
     "Include the f tag only when it is semantically relevant that the word is feminine. "
-    "Do not tag prepositions, conjunctions, or auxiliary verbs. "
+    "Do not tag prepositions or conjunctions. "
     "proper_nouns must be an array of objects with nominative and definition. "
     "Include unfamiliar proper nouns for most Americans only: exclude globally famous names "
     "(e.g., Paris, Mozart) but include local figures, places, and organizations. "
@@ -536,7 +571,7 @@ SENTENCE_SYSTEM_PROMPT = (
     "grammar_notes must be an array of objects with title and note. "
     "Only include surprising grammar features for an English speaker; exclude basics like adjective gender "
     "agreement or verb number agreement. Focus on tense/mood/aspect differences, unusual word order, "
-    "or constructions without direct English equivalents. "
+    "and idiomatic or formulaic expressions. "
     "If a surface form is ambiguous, choose the single most contextually appropriate lemma. "
     "Include arrays even if empty."
 )

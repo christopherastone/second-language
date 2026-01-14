@@ -607,7 +607,24 @@ JSON Schema:
           "tags": {
             "type": "array",
             "items": {
-              "type": "string"
+              "type": "string",
+              "enum": [
+                "1",
+                "2",
+                "3",
+                "f",
+                "sg",
+                "du",
+                "pl",
+                "nom",
+                "gen",
+                "dat",
+                "acc",
+                "ins",
+                "loc",
+                "refl",
+                "ptcp"
+              ]
             }
           }
         }

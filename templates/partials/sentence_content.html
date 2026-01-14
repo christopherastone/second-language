@@ -1,128 +1,131 @@
 <div id="sentence-content" class="fade-in">
-  <div class="card card-section">
-    {% if content %}
-      <div class="token-line">
-        {% for token in content.tokens -%}
-          {% set is_punct = not (token.surface | has_alpha) %}
-          <span class="token-card">
-            {% if is_punct or token.lemma is not defined %}
-              <span class="token-surface">{{ token.surface }}</span>
-            {% else %}
-              <a
-                class="token-surface"
-                href="{{ token.lemma | lemma_url(language) }}"
-              >{{ token.surface }}</a>
-            {% endif %}
-            {% if is_punct %}
-              <span class="gloss token-gloss">&nbsp;</span>
-            {% else %}
-              <span class="gloss token-gloss">
-                {% if token.tags %}
-                  {{ token.translation }}.{{ token.tags | join('.') }}
+    <div class="card card-section">
+        {% if content %}
+        <div class="token-line">
+            {% for token in content.tokens -%}
+            {% set is_punct = not (token.surface | has_alpha) %}
+            <span class="token-card">
+                {% if is_punct or token.lemma is not defined %}
+                <span class="token-surface">{{ token.surface }}</span>
                 {% else %}
-                  {{ token.translation }}
+                <a
+                    class="token-surface"
+                    href="{{ token.lemma | lemma_url(language) }}">{{
+                    token.surface }}</a>
                 {% endif %}
-              </span>
-            {% endif %}
-          </span>{% if not loop.last %} {% endif %}
-        {%- endfor %}
-      </div>
+                {% if is_punct %}
+                <span class="gloss token-gloss">&nbsp;</span>
+                {% else %}
+                <span class="gloss token-gloss">
+                    {% if token.tags %}
+                    {{ token.translation }}.{{ token.tags | join('.') }}
+                    {% else %}
+                    {{ token.translation }}
+                    {% endif %}
+                </span>
+                {% endif %}
+            </span>{% if not loop.last %} {% endif %}
+            {%- endfor %}
+        </div>
 
-      <audio
-        class="sentence-audio"
-        controls
-        preload="none"
-        src="{{ url_for('sentence_audio', lang=language, hash_slug=sentence.hash) }}"
-      ></audio>
+        <audio
+            class="sentence-audio"
+            controls
+            preload="none"
+            src="{{ url_for('sentence_audio', lang=language, hash_slug=sentence.hash) }}"></audio>
 
-      <div class="sentence-translation">
-        <p class="section-title section-title--tight">Natural translation</p>
-        <p class="sentence-translation__text">
-          {{ content.natural_english_translation }}
-        </p>
-      </div>
-    {% else %}
-      <div class="sentence-fallback">{{ sentence.text }}</div>
-    {% endif %}
-  </div>
-
-  {% if content and content.proper_nouns %}
-    <div class="content-section">
-      <h2 class="section-title section-title--spaced">Proper nouns</h2>
-      <div class="info-list">
-        {% for item in content.proper_nouns %}
-          <div class="info-card">
-            <p class="info-card-title">{{ item.nominative }}</p>
-            <p class="info-card-text">{{ item.definition }}</p>
-          </div>
-        {% endfor %}
-      </div>
+        <div class="sentence-translation">
+            <p class="sentence-translation__text">
+                {{ content.natural_english_translation }}
+            </p>
+        </div>
+        {% else %}
+        <div class="sentence-fallback">{{ sentence.text }}</div>
+        {% endif %}
     </div>
-  {% endif %}
 
-  {% if content and content.grammar_notes %}
+    {% if content and content.proper_nouns %}
     <div class="content-section">
-      <h2 class="section-title section-title--spaced">Grammar notes</h2>
-      <div class="info-list">
-        {% for item in content.grammar_notes %}
-          <div class="info-card">
-            <p class="info-card-title">{{ item.title }}</p>
-            <p class="info-card-text">{{ item.note }}</p>
-          </div>
-        {% endfor %}
-      </div>
+        <h2 class="section-title section-title--spaced">Proper nouns</h2>
+        <div class="info-list">
+            {% for item in content.proper_nouns %}
+            <div class="info-card">
+                <p class="info-card-title">{{ item.nominative }}</p>
+                <p class="info-card-text">{{ item.definition }}</p>
+            </div>
+            {% endfor %}
+        </div>
     </div>
-  {% endif %}
-
-  <div class="action-bar action-bar--spaced">
-    {% if error %}
-      <div class="alert alert-danger action-alert">
-        {{ error }}
-      </div>
     {% endif %}
 
-    <div class="action-row">
-      {% set target_id = "sentence-favorite-" ~ sentence.id %}
-      {% set action = url_for('sentence_favorite', lang=language, hash_slug=sentence.hash) %}
-      {% include "partials/favorite_star.html" %}
-
-      <form
-        method="post"
-        action="{{ url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash) }}"
-        hx-post="{{ url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash) }}"
-        hx-target="#sentence-content"
-        hx-swap="outerHTML"
-        hx-push-url="false"
-        class="action-form"
-      >
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <select
-          id="sentence-model"
-          name="model"
-          class="select"
-        >
-          {% for model in model_choices %}
-            <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
-          {% endfor %}
-        </select>
-        <button
-          type="submit"
-          class="btn btn-secondary"
-          hx-on:htmx:beforeRequest="this.dataset.label=this.innerText; this.innerText='Regenerating...'; this.disabled=true; this.setAttribute('aria-busy','true');"
-          hx-on:htmx:afterRequest="this.disabled=false; this.innerText=this.dataset.label || 'Regenerate'; this.removeAttribute('aria-busy');"
-        >
-          {{ "Try again" if error else "Regenerate" }}
-        </button>
-      </form>
-
-      <span class="action-hint">
-        Generated with {{ content.model_used if content else 'unknown' }}
-      </span>
-
-      <form method="post" action="{{ url_for('sentence_delete', lang=language, hash_slug=sentence.hash) }}" class="action-spacer">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-      </form>
+    {% if content and content.grammar_notes %}
+    <div class="content-section">
+        <h2 class="section-title section-title--spaced">Grammar notes</h2>
+        <div class="info-list">
+            {% for item in content.grammar_notes %}
+            <div class="info-card">
+                <p class="info-card-title">{{ item.title }}</p>
+                <p class="info-card-text">{{ item.note }}</p>
+            </div>
+            {% endfor %}
+        </div>
     </div>
-  </div>
+    {% endif %}
+
+    <div class="action-bar action-bar--spaced">
+        {% if error %}
+        <div class="alert alert-danger action-alert">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <div class="action-row">
+            {% set target_id = "sentence-favorite-" ~ sentence.id %}
+            {% set action = url_for('sentence_favorite', lang=language,
+            hash_slug=sentence.hash) %}
+            {% include "partials/favorite_star.html" %}
+
+            <form
+                method="post"
+                action="{{ url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash) }}"
+                hx-post="{{ url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash) }}"
+                hx-target="#sentence-content"
+                hx-swap="outerHTML"
+                hx-push-url="false"
+                class="action-form">
+                <input type="hidden" name="csrf_token"
+                    value="{{ csrf_token() }}" />
+                <select
+                    id="sentence-model"
+                    name="model"
+                    class="select">
+                    {% for model in model_choices %}
+                    <option value="{{ model }}" {% if model == selected_model
+                        %}selected{% endif %}>{{ model }}</option>
+                    {% endfor %}
+                </select>
+                <button
+                    type="submit"
+                    class="btn btn-secondary"
+                    hx-on:htmx:beforeRequest="this.dataset.label=this.innerText; this.innerText='Regenerating...'; this.disabled=true; this.setAttribute('aria-busy','true');"
+                    hx-on:htmx:afterRequest="this.disabled=false; this.innerText=this.dataset.label || 'Regenerate'; this.removeAttribute('aria-busy');">
+                    {{ "Try again" if error else "Regenerate" }}
+                </button>
+            </form>
+
+            <span class="action-hint">
+                Generated with {{ content.model_used if content else 'unknown'
+                }}
+            </span>
+
+            <form method="post"
+                action="{{ url_for('sentence_delete', lang=language, hash_slug=sentence.hash) }}"
+                class="action-spacer">
+                <input type="hidden" name="csrf_token"
+                    value="{{ csrf_token() }}" />
+                <button type="submit"
+                    class="btn btn-danger btn-sm">Delete</button>
+            </form>
+        </div>
+    </div>
 </div>
