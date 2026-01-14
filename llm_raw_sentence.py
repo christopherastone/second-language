@@ -3,7 +3,12 @@ import argparse
 import logging
 
 from config import DEFAULT_MODEL, MODEL_CHOICES
-from llm import SENTENCE_SYSTEM_PROMPT, request_raw_text
+from llm import (
+    SENTENCE_SCHEMA_NAME,
+    SENTENCE_SCHEMA_OUTPUT,
+    SENTENCE_SYSTEM_PROMPT,
+    request_raw_schema_text,
+)
 
 SENTENCE_TEXT = (
     "Ali bo premier Robert Golob odstopil? Sam pravi: "
@@ -38,7 +43,13 @@ def main() -> None:
     logger = logging.getLogger("llm_raw_sentence")
     logger.info("System prompt:\n%s", SENTENCE_SYSTEM_PROMPT)
     logger.info("User prompt:\n%s", user_prompt)
-    output_text = request_raw_text(SENTENCE_SYSTEM_PROMPT, user_prompt, args.model)
+    output_text = request_raw_schema_text(
+        SENTENCE_SYSTEM_PROMPT,
+        user_prompt,
+        args.model,
+        SENTENCE_SCHEMA_OUTPUT,
+        SENTENCE_SCHEMA_NAME,
+    )
     print(output_text)
 
 

@@ -3,7 +3,12 @@ import argparse
 import logging
 
 from config import DEFAULT_MODEL, MODEL_CHOICES
-from llm import LEMMA_SYSTEM_PROMPT, request_raw_text
+from llm import (
+    LEMMA_SCHEMA_NAME,
+    LEMMA_SCHEMA_OUTPUT,
+    LEMMA_SYSTEM_PROMPT,
+    request_raw_schema_text,
+)
 
 LEMMA_TEXT = "negotov"
 LANGUAGE = "sl"
@@ -42,7 +47,13 @@ def main() -> None:
     logger = logging.getLogger("llm_raw_lemma")
     logger.info("System prompt:\n%s", LEMMA_SYSTEM_PROMPT)
     logger.info("User prompt:\n%s", user_prompt)
-    output_text = request_raw_text(LEMMA_SYSTEM_PROMPT, user_prompt, args.model)
+    output_text = request_raw_schema_text(
+        LEMMA_SYSTEM_PROMPT,
+        user_prompt,
+        args.model,
+        LEMMA_SCHEMA_OUTPUT,
+        LEMMA_SCHEMA_NAME,
+    )
     print(output_text)
 
 

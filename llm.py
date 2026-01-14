@@ -69,6 +69,60 @@ SENTENCE_SCHEMA = {
         },
     },
 }
+SENTENCE_SCHEMA_OUTPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "sentence_text",
+        "natural_english_translation",
+        "tokens",
+        "proper_nouns",
+        "grammar_notes",
+    ],
+    "properties": {
+        "sentence_text": {"type": "string"},
+        "natural_english_translation": {"type": "string"},
+        "tokens": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["surface", "lemma", "translation", "tags"],
+                "properties": {
+                    "surface": {"type": "string"},
+                    "lemma": {"type": "string"},
+                    "translation": {"type": "string"},
+                    "tags": {"type": "array", "items": {"type": "string"}},
+                },
+            },
+        },
+        "proper_nouns": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["nominative", "definition"],
+                "properties": {
+                    "nominative": {"type": "string"},
+                    "definition": {"type": "string"},
+                },
+            },
+        },
+        "grammar_notes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["title", "note"],
+                "properties": {
+                    "title": {"type": "string"},
+                    "note": {"type": "string"},
+                },
+            },
+        },
+    },
+}
+SENTENCE_SCHEMA_NAME = "SentenceDetailGenerationV1"
 
 LEMMA_SCHEMA = {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -102,6 +156,36 @@ LEMMA_SCHEMA = {
         },
     },
 }
+LEMMA_SCHEMA_OUTPUT = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "lemma",
+        "normalized_lemma",
+        "translation",
+        "related_words",
+    ],
+    "properties": {
+        "lemma": {"type": "string"},
+        "normalized_lemma": {"type": "string"},
+        "translation": {"type": "string"},
+        "related_words": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["word", "normalized_lemma", "translation", "note"],
+                "properties": {
+                    "word": {"type": "string"},
+                    "normalized_lemma": {"type": "string"},
+                    "translation": {"type": "string"},
+                    "note": {"type": "string"},
+                },
+            },
+        },
+    },
+}
+LEMMA_SCHEMA_NAME = "LemmaPageGenerationV1"
 
 TRANSIENT_STATUS = {429, 500, 502, 503, 504}
 
@@ -214,8 +298,73 @@ def request_raw_text(system_prompt: str, user_prompt: str, model: str) -> str:
     return text
 
 
-def _request_json(system_prompt: str, user_prompt: str, model: str) -> dict[str, Any]:
-    text = request_raw_text(system_prompt, user_prompt, model)
+def request_raw_schema_text(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    schema: dict[str, Any],
+    schema_name: str,
+) -> str:
+    client = get_client()
+    start = time.monotonic()
+    logger.info("LLM request started model=%s", model)
+    logger.info(system_prompt)
+    logger.info(user_prompt)
+
+    def make_request(use_text_format: bool):
+        params: dict[str, Any] = {
+            "model": model,
+            "input": user_prompt,
+            "instructions": system_prompt,
+        }
+        if use_text_format:
+            params["text"] = {
+                "format": {
+                    "type": "json_schema",
+                    "name": schema_name,
+                    "schema": schema,
+                    "strict": True,
+                }
+            }
+        return client.responses.create(**params)
+
+    try:
+        response = make_request(use_text_format=True)
+    except OpenAIError as exc:
+        if _is_unsupported_text_format(exc):
+            body = getattr(exc, "body", None)
+            if body:
+                logger.warning(
+                    "LLM structured output rejected model=%s body=%s", model, body
+                )
+            logger.warning(
+                "LLM structured output unsupported; retrying without it model=%s",
+                model,
+            )
+            response = make_request(use_text_format=False)
+        else:
+            raise
+    logger.info("LLM response received model=%s", model)
+    text = _extract_output_text(response)
+    elapsed = time.monotonic() - start
+    logger.info("LLM request completed model=%s elapsed=%.2fs", model, elapsed)
+    return text
+
+
+def _request_json_schema(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    schema: dict[str, Any],
+    schema_name: str,
+) -> dict[str, Any]:
+    text = request_raw_schema_text(
+        system_prompt,
+        user_prompt,
+        model,
+        schema,
+        schema_name,
+    )
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:
@@ -433,7 +582,13 @@ def generate_sentence_content(
     while True:
         try:
             attempt += 1
-            payload = _request_json(SENTENCE_SYSTEM_PROMPT, user_prompt, model)
+            payload = _request_json_schema(
+                SENTENCE_SYSTEM_PROMPT,
+                user_prompt,
+                model,
+                SENTENCE_SCHEMA_OUTPUT,
+                SENTENCE_SCHEMA_NAME,
+            )
             logger.debug("LLM returned payload: %s", payload)
             _validate_sentence_payload(payload, sentence_text)
             payload["model_used"] = model
@@ -491,7 +646,13 @@ def generate_lemma_content(
     while True:
         try:
             attempt += 1
-            payload = _request_json(LEMMA_SYSTEM_PROMPT, user_prompt, model)
+            payload = _request_json_schema(
+                LEMMA_SYSTEM_PROMPT,
+                user_prompt,
+                model,
+                LEMMA_SCHEMA_OUTPUT,
+                LEMMA_SCHEMA_NAME,
+            )
             _validate_lemma_payload(payload, normalized_lemma)
             logger.debug("Successfully validated LLM lemma payload")
             payload["model_used"] = model
