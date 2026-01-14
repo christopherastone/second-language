@@ -60,6 +60,10 @@ def _iter_candidates(language: str, feeds: list[dict], db):
             continue
         for entry in parsed.entries:
             article_id = _article_id(entry)
+            link = entry.get("link")
+            article_link = str(link).strip() if link else None
+            if article_link == "":
+                article_link = None
             exists = db.execute(
                 "SELECT 1 FROM rss_articles WHERE article_id = ?", (article_id,)
             ).fetchone()
@@ -82,6 +86,7 @@ def _iter_candidates(language: str, feeds: list[dict], db):
                 continue
             yield {
                 "article_id": article_id,
+                "article_link": article_link,
                 "headline": headline,
                 "sentence_hash": sentence_hash,
             }
@@ -115,14 +120,15 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
                 db.execute(
                     """
                     INSERT INTO sentences (
-                        language, hash, text, gloss_json, proper_nouns_json, grammar_notes_json,
+                        language, hash, text, article_link, gloss_json, proper_nouns_json, grammar_notes_json,
                         natural_translation, model_used, schema_version, access_count, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                     """,
                     (
                         language,
                         item["sentence_hash"],
                         item["headline"],
+                        item["article_link"],
                         json_dumps(payload["tokens"]),
                         json_dumps(payload["proper_nouns"]),
                         json_dumps(payload["grammar_notes"]),

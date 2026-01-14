@@ -110,14 +110,15 @@ def add_sentence(args, feeds):
         db.execute(
             """
             INSERT INTO sentences (
-                language, hash, text, gloss_json, proper_nouns_json, grammar_notes_json,
+                language, hash, text, article_link, gloss_json, proper_nouns_json, grammar_notes_json,
                 natural_translation, model_used, schema_version, access_count, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
             """,
             (
                 language,
                 sentence_hash,
                 text,
+                None,
                 json.dumps(payload["tokens"], ensure_ascii=False),
                 json.dumps(payload["proper_nouns"], ensure_ascii=False),
                 json.dumps(payload["grammar_notes"], ensure_ascii=False),

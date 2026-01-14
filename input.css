@@ -47,6 +47,19 @@ body {
   line-height: 1.6;
 }
 
+.page-shell {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+}
+
+@media (min-width: 640px) {
+  .page-shell {
+    padding-left: 2.5rem;
+    padding-right: 2.5rem;
+  }
+}
+
 /* Hide glosses toggle */
 .hide-glosses .gloss {
   visibility: hidden;

@@ -1,7 +1,10 @@
+import getpass
 import sqlite3
 from pathlib import Path
 
-from config import get_database_path
+from werkzeug.security import generate_password_hash
+
+from config import get_database_path, is_language_valid, load_feeds
 
 SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS settings (
@@ -15,6 +18,7 @@ CREATE TABLE IF NOT EXISTS sentences (
   language TEXT NOT NULL,
   hash TEXT NOT NULL,
   text TEXT NOT NULL,
+  article_link TEXT,
   gloss_json TEXT,
   proper_nouns_json TEXT,
   grammar_notes_json TEXT,
@@ -78,11 +82,46 @@ CREATE INDEX IF NOT EXISTS idx_favorites_created_at
 
 
 def main() -> None:
+    feeds = load_feeds()
+    languages = sorted({feed["language"] for feed in feeds})
+    if not languages:
+        raise RuntimeError("No languages configured in feeds.yaml")
+
+    while True:
+        password = getpass.getpass("New admin password: ").strip()
+        confirm = getpass.getpass("Confirm password: ").strip()
+        if not password:
+            print("Password cannot be empty.")
+            continue
+        if password != confirm:
+            print("Passwords do not match.")
+            continue
+        break
+
+    default_language = languages[0]
+    language_hint = ", ".join(languages)
+    while True:
+        language = input(
+            f"Default language ({language_hint}) [default: {default_language}]: "
+        ).strip().lower()
+        if not language:
+            language = default_language
+        if is_language_valid(language, feeds):
+            break
+        print("Invalid language. Must match a configured feeds.yaml language.")
+
     db_path = get_database_path()
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    db_file = Path(db_path)
+    db_file.parent.mkdir(parents=True, exist_ok=True)
+    if db_file.exists():
+        db_file.unlink()
     conn = sqlite3.connect(db_path)
     try:
         conn.executescript(SCHEMA_SQL)
+        conn.execute(
+            "INSERT INTO settings (id, password_hash, default_language) VALUES (1, ?, ?)",
+            (generate_password_hash(password), language),
+        )
         conn.commit()
     finally:
         conn.close()

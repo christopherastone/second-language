@@ -153,7 +153,7 @@ The canonical dictionary form of a token.
 - Each row shows:
   - The full sentence text (no truncation).
   - A filled star icon if the sentence is favorited.
-  - Parenthesized access count (omit if access count is zero; never-accessed sentences show no count).
+  - Parenthesized source link label when available, plus access count when nonzero (e.g., `(link, 2)`, `(link)`, `(2)`).
 - Sorted by insert time, newest first.
 - No pagination or search/filter. All sentences displayed.
 - Clicking a sentence navigates to its detail page. Words/lemmas are not separately clickable.
@@ -335,6 +335,7 @@ CREATE TABLE IF NOT EXISTS sentences (
   language TEXT NOT NULL,
   hash TEXT NOT NULL,
   text TEXT NOT NULL,
+  article_link TEXT,
   gloss_json TEXT,
   proper_nouns_json TEXT,
   grammar_notes_json TEXT,
@@ -420,7 +421,7 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
   5. Skip headlines that become empty after processing.
   6. Call LLM to generate content (translations, proper nouns, grammar notes).
   7. If LLM fails, skip that headline (do not add to database or deduplication table).
-  8. Insert the sentence into the `sentences` table.
+  8. Insert the sentence into the `sentences` table, storing the article link when available.
   9. Populate `sentence_lemmas` for that sentence from the generated tokens (unique per sentence; skip punctuation).
   10. Insert at most 5 new sentences per update (configurable constant); stop after the limit and leave remaining headlines for a future update.
 

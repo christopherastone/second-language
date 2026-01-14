@@ -12,8 +12,17 @@
         <a class="link text-base font-medium leading-relaxed" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
           {{ sentence.text }}
         </a>
-        {% if sentence.access_count > 0 %}
-          <span class="text-xs text-muted ml-2">({{ sentence.access_count }})</span>
+        {% if sentence.article_link or sentence.access_count > 0 %}
+          <span class="text-xs text-muted ml-2">
+            (
+            {% if sentence.article_link %}
+              <a class="link" href="{{ sentence.article_link }}" target="_blank" rel="noopener noreferrer">link</a>{% if sentence.access_count > 0 %},{% endif %}
+            {% endif %}
+            {% if sentence.access_count > 0 %}
+              {{ sentence.access_count }}
+            {% endif %}
+            )
+          </span>
         {% endif %}
       </div>
     </div>

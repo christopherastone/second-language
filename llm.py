@@ -268,8 +268,6 @@ def request_raw_text(system_prompt: str, user_prompt: str, model: str) -> str:
     client = get_client()
     start = time.monotonic()
     logger.info("LLM request started model=%s", model)
-    logger.info(system_prompt)
-    logger.info(user_prompt)
 
     def make_request(use_text_format: bool):
         params: dict[str, Any] = {
