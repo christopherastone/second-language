@@ -7,11 +7,11 @@
     hx-swap="outerHTML"
   >
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-    <button type="submit" class="text-xl">
+    <button type="submit" class="btn btn-ghost px-3" title="{{ 'Remove from favorites' if is_favorite else 'Add to favorites' }}">
       {% if is_favorite %}
-        <span aria-label="favorited" class="text-[color:var(--accent)]">&#9733;</span>
+        <span class="star star-filled" aria-label="favorited">&#9733;</span>
       {% else %}
-        <span aria-label="not favorited" class="text-[color:var(--muted)]">&#9734;</span>
+        <span class="star star-empty" aria-label="not favorited">&#9734;</span>
       {% endif %}
     </button>
   </form>

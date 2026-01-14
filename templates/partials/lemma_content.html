@@ -1,51 +1,57 @@
-<div id="lemma-content" class="space-y-10 fade-in">
-  <div class="section-block">
+<div id="lemma-content" class="fade-in">
+  <div class="card p-8 mb-8">
     <div class="focus-title">
       {{ content.lemma if content else lemma_display }}
     </div>
     {% if content %}
-      <div class="text-[color:var(--muted)] mt-2">{{ content.translation }}</div>
+      <p class="text-lg text-secondary mt-3">{{ content.translation }}</p>
     {% endif %}
   </div>
 
   {% if content and content.related_words %}
-    <div class="section-block">
-      <h2 class="section-title mb-3">Related words</h2>
-      <ul class="space-y-2">
+    <div class="mb-8">
+      <h2 class="section-title mb-4">Related words</h2>
+      <div class="card divide-y divide-[color:var(--border-light)]">
         {% for item in content.related_words %}
-          <li>
-            <a class="underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ item.normalized_lemma | lemma_url(language) }}">
-              {{ item.word }}
-            </a>
-            <span class="text-[color:var(--muted)]">({{ item.translation }})</span>
-            <div class="text-xs text-[color:var(--muted)]">{{ item.note }}</div>
-          </li>
+          <div class="p-4">
+            <div class="flex items-baseline gap-2">
+              <a class="link font-medium" href="{{ item.normalized_lemma | lemma_url(language) }}">
+                {{ item.word }}
+              </a>
+              <span class="text-muted text-sm">({{ item.translation }})</span>
+            </div>
+            {% if item.note %}
+              <p class="text-sm text-secondary mt-1">{{ item.note }}</p>
+            {% endif %}
+          </div>
         {% endfor %}
-      </ul>
+      </div>
     </div>
   {% endif %}
 
   {% if sentences %}
-    <div class="section-block">
-      <h2 class="section-title mb-3">Sentences containing this lemma</h2>
-      <ul class="space-y-2">
+    <div class="mb-8">
+      <h2 class="section-title mb-4">Sentences containing this lemma</h2>
+      <div class="card divide-y divide-[color:var(--border-light)]">
         {% for sentence in sentences %}
-          <li>
-            <a class="underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
+          <div class="p-4">
+            <a class="link" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
               {{ sentence.text }}
             </a>
-          </li>
+          </div>
         {% endfor %}
-      </ul>
+      </div>
     </div>
   {% endif %}
 
-  <div class="pt-6 border-t border-[color:var(--border)] space-y-4">
+  <div class="action-bar mt-8">
     {% if error %}
-      <div class="text-sm text-red-600">{{ error }}</div>
+      <div class="w-full mb-4 p-3 bg-[color:var(--danger-light)] text-[color:var(--danger)] rounded-lg text-sm">
+        {{ error }}
+      </div>
     {% endif %}
 
-    <div class="flex flex-wrap items-center gap-4">
+    <div class="flex flex-wrap items-center gap-3">
       {% set target_id = "lemma-favorite-" ~ lemma_id %}
       {% set action = url_for('lemma_favorite', lang=language, lemma=lemma_text) %}
       {% include "partials/favorite_star.html" %}
@@ -63,24 +69,23 @@
         hx-on:htmx:afterRequest="const btn=this.querySelector('button'); btn.innerText=btn.dataset.label || 'Regenerate'; btn.removeAttribute('aria-busy');"
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <label class="text-sm text-[color:var(--muted)]" for="lemma-model">Model</label>
         <select
           id="lemma-model"
           name="model"
-          class="border border-[color:var(--border)] rounded-full px-3 py-1 text-sm bg-white"
+          class="select"
         >
           {% for model in model_choices %}
             <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
           {% endfor %}
         </select>
-        <button type="submit" class="btn btn-primary">
+        <button type="submit" class="btn btn-secondary">
           {{ "Try again" if error else "Regenerate" }}
         </button>
       </form>
 
-      <div class="text-xs text-[color:var(--muted)]">
-        Generated with: {{ content.model_used if content else 'unknown' }}
-      </div>
+      <span class="text-xs text-muted">
+        Generated with {{ content.model_used if content else 'unknown' }}
+      </span>
     </div>
   </div>
 </div>

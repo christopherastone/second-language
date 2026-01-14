@@ -1,42 +1,60 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="space-y-8 fade-in">
-  <div>
-    <h1 class="page-title mb-2">Favorites</h1>
-    <p class="text-sm text-[color:var(--muted)]">Your saved sentences and lemmas.</p>
+<div class="fade-in">
+  <div class="mb-10">
+    <h1 class="page-title">Favorites</h1>
+    <p class="text-sm text-muted mt-1">Your saved sentences and lemmas.</p>
   </div>
 
-  <div>
-    <h2 class="section-title mb-3">Sentences</h2>
-    <ul class="space-y-2">
-      {% for sentence in sentence_favorites %}
-        <li class="flex items-start gap-2">
-          <span class="text-lg text-[color:var(--accent)]" aria-hidden="true">&#9733;</span>
-          <a class="underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ url_for('sentence_detail', lang=sentence.language, hash_slug=sentence.hash) }}">
-            {{ sentence.text }}
-          </a>
-        </li>
+  <div class="grid gap-10">
+    <section>
+      <h2 class="section-title mb-4">Sentences</h2>
+      {% if sentence_favorites %}
+        <div class="card divide-y divide-[color:var(--border-light)]">
+          {% for sentence in sentence_favorites %}
+            <div class="p-4 flex items-start gap-3">
+              <span class="star star-filled flex-shrink-0" aria-hidden="true">&#9733;</span>
+              <div>
+                <a class="link font-medium" href="{{ url_for('sentence_detail', lang=sentence.language, hash_slug=sentence.hash) }}">
+                  {{ sentence.text }}
+                </a>
+                <span class="lang-badge ml-2 text-[0.625rem]">{{ sentence.language }}</span>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
       {% else %}
-        <li class="text-[color:var(--muted)]">No favorited sentences.</li>
-      {% endfor %}
-    </ul>
-  </div>
+        <div class="card p-6 text-center">
+          <p class="text-muted">No favorited sentences yet.</p>
+          <p class="text-sm text-muted mt-1">Star sentences to save them here.</p>
+        </div>
+      {% endif %}
+    </section>
 
-  <div>
-    <h2 class="section-title mb-3">Lemmas</h2>
-    <ul class="space-y-2">
-      {% for lemma in lemma_favorites %}
-        <li class="flex items-start gap-2">
-          <span class="text-lg text-[color:var(--accent)]" aria-hidden="true">&#9733;</span>
-          <a class="underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ url_for('lemma_detail', lang=lemma.language, lemma=lemma.normalized_lemma) }}">
-            {{ lemma.normalized_lemma }}
-          </a>
-        </li>
+    <section>
+      <h2 class="section-title mb-4">Lemmas</h2>
+      {% if lemma_favorites %}
+        <div class="card divide-y divide-[color:var(--border-light)]">
+          {% for lemma in lemma_favorites %}
+            <div class="p-4 flex items-start gap-3">
+              <span class="star star-filled flex-shrink-0" aria-hidden="true">&#9733;</span>
+              <div>
+                <a class="link font-medium" href="{{ url_for('lemma_detail', lang=lemma.language, lemma=lemma.normalized_lemma) }}">
+                  {{ lemma.normalized_lemma }}
+                </a>
+                <span class="lang-badge ml-2 text-[0.625rem]">{{ lemma.language }}</span>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
       {% else %}
-        <li class="text-[color:var(--muted)]">No favorited lemmas.</li>
-      {% endfor %}
-    </ul>
+        <div class="card p-6 text-center">
+          <p class="text-muted">No favorited lemmas yet.</p>
+          <p class="text-sm text-muted mt-1">Star lemmas to save them here.</p>
+        </div>
+      {% endif %}
+    </section>
   </div>
 </div>
 {% endblock %}

@@ -1,21 +1,26 @@
-<div id="sentence-list" class="space-y-8 stagger">
+<div id="sentence-list" class="space-y-3 stagger">
   {% for sentence in sentences %}
-    <div class="px-1 pb-8 flex items-start gap-4 border-b border-[color:var(--border)]">
-      <div class="text-lg text-[color:var(--accent)]">
+    <div class="sentence-item">
+      <div class="flex-shrink-0 mt-0.5">
         {% if sentence.is_favorite %}
-          <span aria-label="favorited">&#9733;</span>
+          <span class="star star-filled" aria-label="favorited">&#9733;</span>
         {% else %}
-          <span aria-label="not favorited">&#9734;</span>
+          <span class="star star-empty" aria-label="not favorited">&#9734;</span>
         {% endif %}
       </div>
-      <div>
-        <a class="text-lg font-semibold underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">{{ sentence.text }}</a>
+      <div class="flex-1 min-w-0">
+        <a class="link text-base font-medium leading-relaxed" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
+          {{ sentence.text }}
+        </a>
         {% if sentence.access_count > 0 %}
-          <span class="text-xs text-[color:var(--muted)]">({{ sentence.access_count }})</span>
+          <span class="text-xs text-muted ml-2">({{ sentence.access_count }})</span>
         {% endif %}
       </div>
     </div>
   {% else %}
-    <div class="text-[color:var(--muted)]">No sentences yet.</div>
+    <div class="card p-8 text-center">
+      <p class="text-muted">No sentences yet.</p>
+      <p class="text-sm text-muted mt-2">Click "Update" to fetch new headlines.</p>
+    </div>
   {% endfor %}
 </div>
