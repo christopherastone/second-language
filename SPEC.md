@@ -172,7 +172,7 @@ The canonical dictionary form of a token.
      - Gloss visibility follows the session "Show glosses" setting; when disabled, gloss text is hidden via CSS but tokens remain visible and clickable.
     - Gloss format: `translation.tag1.tag2` (Leipzig abbreviations, dot-separated, tags after translation, e.g., `to run.3.sg`). The UI composes this from `translation` + `tags`.
      - If a word has no Leipzig tags (e.g., simple prepositions), show translation only without POS annotation.
-- Allowable Leipzig Glossing tags: `1`, `2`, `3`, `sg`, `du`, `pl`, `nom`, `gen`, `dat`, `acc`, `ins`, `loc`, `refl`.
+- Allowable Leipzig Glossing tags: `1`, `2`, `3`, `f`, `sg`, `du`, `pl`, `nom`, `gen`, `dat`, `acc`, `ins`, `loc`, `refl`, `ptcp`.
      - Word tokens link to their lemma page; show underline on hover (standard link behavior).
      - Punctuation tokens have the same inline-block layout but with empty gloss row.
 
@@ -536,7 +536,7 @@ Top-level object:
 - `tokens` (array of `Token`)
 - `proper_nouns` (array of `ProperNoun`)
 - `grammar_notes` (array of `GrammarNote`)
- 
+
 
 Note: `schema_version` and `model_used` are stored in database columns only, not in the JSON payload.
 
@@ -648,7 +648,7 @@ Top-level object:
 - `normalized_lemma` (string): already normalized; used for storage and URLs
 - `translation` (string)
 - `related_words` (array of `RelatedWord`, length <= 8)
- 
+
 
 Note: `schema_version` and `model_used` are stored in database columns only, not in the JSON payload.
 
@@ -732,7 +732,7 @@ A unified CLI script named `cli` manages settings and sentences:
 
 ### `feeds.yaml` format
 
-`./feeds.yaml` contains a list of feed objects. 
+`./feeds.yaml` contains a list of feed objects.
 Feed object format:
 - `id` (string, required)
 - `url` (string, required)

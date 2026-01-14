@@ -103,25 +103,6 @@ LEMMA_SCHEMA = {
     },
 }
 
-ALLOWED_TAGS = [
-    "1",
-    "2",
-    "3",
-    "sg",
-    "du",
-    "pl",
-    "nom",
-    "gen",
-    "dat",
-    "acc",
-    "ins",
-    "loc",
-    "refl",
-    "m",
-    "f",
-    "n",
-]
-
 TRANSIENT_STATUS = {429, 500, 502, 503, 504}
 
 _client: OpenAI | None = None
@@ -394,8 +375,12 @@ SENTENCE_SYSTEM_PROMPT = (
     "(including internal spaces). Punctuation must be separate tokens. "
     "Include a natural_english_translation for the whole sentence. "
     "For non-punctuation tokens, include their lemma, their English translation, and relevant grammatical tags. "
+    "The lemma is the dictionary form of the word, e.g., infinitive for verbs (including 'se' if reflexive), nominative for nouns, masculine singular for adjectives. "
+    "Translate helper verbs as AUX (instead of 'be' or 'to be') and participles as PTCP. "
     "Tags must be lowercase and selected from this list only: "
-    "1, 2, 3, sg, du, pl, nom, gen, dat, acc, ins, loc, refl. "
+    "1, 2, 3, f, nsg, du, pl, nom, gen, dat, acc, ins, loc, refl, ptcp. "
+    "Include the f tag only when it is semantically relevant that the word is feminine. "
+    "Do not tag prepositions, conjunctions, or auxiliary verbs. "
     "proper_nouns must be an array of objects with nominative and definition. "
     "Include unfamiliar proper nouns for most Americans only: exclude globally famous names "
     "(e.g., Paris, Mozart) but include local figures, places, and organizations. "
@@ -418,7 +403,7 @@ LEMMA_SYSTEM_PROMPT = (
     "and include a short note explaining the relationship. "
     "Include up to 8 related entries; each must include word, normalized_lemma, translation, and note, "
     "and can be a phrase. "
-    "Prefer etymologically related forms, false friends, near-synonyms, useful contrasts; "
+    'Prefer etymologically related but distinct forms (e.g., "lep", "lepoten", "lepta", and "lepšati se" are related; "gora" and "gorica" are related), easy-to-confuse (e.g., "kokos" and "kokoš", or "brat" and "brati", or "učiti" and "naučiti se"), exact antonyms (e.g., "varen" and "nevaren"); useful contrasts (e.g., "vedeti" and "znati"). '
     "only claim etymological relationships when you are confident—otherwise describe it as a related concept "
     "or contrast instead of asserting shared origin. "
     "All related words must be in the target language provided in the prompt; omit any entry you are not sure belongs. "
