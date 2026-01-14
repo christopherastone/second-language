@@ -1,23 +1,23 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="max-w-sm mx-auto py-12 fade-in">
-  <div class="card-elevated p-8">
-    <div class="text-center mb-8">
-      <h1 class="text-2xl font-bold tracking-tight mb-2">Welcome back</h1>
-      <p class="text-sm text-muted">Enter your password to continue.</p>
+<div class="login-shell fade-in">
+  <div class="card-elevated login-card">
+    <div class="login-header">
+      <h1 class="login-title">Welcome back</h1>
+      <p class="login-subtitle">Enter your password to continue.</p>
     </div>
 
     {% if error %}
-      <div class="mb-6 p-3 bg-[color:var(--danger-light)] text-[color:var(--danger)] rounded-lg text-sm text-center">
+      <div class="alert alert-danger">
         {{ error }}
       </div>
     {% endif %}
 
-    <form method="post" action="{{ url_for('login') }}" class="space-y-5">
+    <form method="post" action="{{ url_for('login') }}" class="form-stack">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
       <div>
-        <label class="block text-sm font-medium text-secondary mb-2" for="password">Password</label>
+        <label class="form-label" for="password">Password</label>
         <input
           class="input"
           type="password"
@@ -28,7 +28,7 @@
           autofocus
         />
       </div>
-      <button class="btn btn-primary w-full py-3" type="submit">Sign in</button>
+      <button class="btn btn-primary btn-block" type="submit">Sign in</button>
     </form>
   </div>
 </div>

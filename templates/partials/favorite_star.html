@@ -7,7 +7,7 @@
     hx-swap="outerHTML"
   >
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-    <button type="submit" class="btn btn-ghost px-3" title="{{ 'Remove from favorites' if is_favorite else 'Add to favorites' }}">
+    <button type="submit" class="btn btn-ghost btn-icon" title="{{ 'Remove from favorites' if is_favorite else 'Add to favorites' }}">
       {% if is_favorite %}
         <span class="star star-filled" aria-label="favorited">&#9733;</span>
       {% else %}

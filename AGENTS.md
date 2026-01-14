@@ -6,7 +6,7 @@ This repository includes the product spec plus the Flask implementation. Key top
 - `CLAUDE.md`: working notes and commands for contributors/agents.
 - `README.md`: project name placeholder.
 - `app.py`, `config.py`, `db.py`, `llm.py`, `rss.py`, `normalization.py`: application modules.
-- `templates/`, `static/`, `input.css`: UI templates and Tailwind assets.
+- `templates/`, `static/`: UI templates and styles.
 - `init_db.py`, `cli`: database initializer and admin CLI.
 - `llm_raw_sentence.py`: debug script to print raw LLM output for a fixed sentence.
 - `llm_raw_lemma.py`: debug script to print raw LLM output for a fixed lemma.
@@ -17,15 +17,14 @@ As implementation evolves, keep source and templates grouped logically. If you a
 ## Build, Test, and Development Commands
 Use the tooling defined in `CLAUDE.md`:
 - `uv sync`: install dependencies.
-- `tailwindcss -i input.css -o static/output.css`: build Tailwind CSS.
-- `uv run python init_db.py`: initialize SQLite.
-- `uv run python cli set-password <password>` / `uv run python cli set-language <lang>`: set admin settings.
+- `uv run python init_db.py`: initialize SQLite (prompts for password + default language).
+- `uv run python cli set-password <password>` / `uv run python cli set-language <lang>`: optional admin settings updates.
 - `uv run flask run`: start dev server.
 - `uv run gunicorn app:app`: production server.
 
 ## Coding Style & Naming Conventions
 - Python/Flask project; prefer small, clear modules over large files.
-- Use consistent 4-space indentation in Python; keep HTML/Tailwind tidy and minimal.
+- Use consistent 4-space indentation in Python; keep HTML/CSS tidy and minimal.
 - Normalize language codes to lowercase two-letter strings (e.g., `sl`, `de`).
 - Keep database and JSON schema names aligned with `SPEC.md`.
 

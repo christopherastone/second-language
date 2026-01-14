@@ -46,6 +46,14 @@ def _article_id(entry: dict) -> str:
     return hashlib.sha256(repr(entry).encode("utf-8")).hexdigest()
 
 
+def _article_link(entry: dict) -> str | None:
+    link = entry.get("link")
+    if not link:
+        return None
+    cleaned = str(link).strip()
+    return cleaned or None
+
+
 def _iter_candidates(language: str, feeds: list[dict], db):
     for feed in enabled_feeds(language, feeds):
         logger.info(
@@ -60,10 +68,7 @@ def _iter_candidates(language: str, feeds: list[dict], db):
             continue
         for entry in parsed.entries:
             article_id = _article_id(entry)
-            link = entry.get("link")
-            article_link = str(link).strip() if link else None
-            if article_link == "":
-                article_link = None
+            article_link = _article_link(entry)
             exists = db.execute(
                 "SELECT 1 FROM rss_articles WHERE article_id = ?", (article_id,)
             ).fetchone()

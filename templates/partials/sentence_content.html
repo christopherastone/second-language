@@ -1,22 +1,22 @@
 <div id="sentence-content" class="fade-in">
-  <div class="card p-8 mb-8">
+  <div class="card card-section">
     {% if content %}
-      <div class="text-xl sm:text-2xl font-semibold leading-loose flex flex-wrap gap-2">
+      <div class="token-line">
         {% for token in content.tokens -%}
           {% set is_punct = not (token.surface | has_alpha) %}
           <span class="token-card">
             {% if is_punct or token.lemma is not defined %}
-              <span class="block">{{ token.surface }}</span>
+              <span class="token-surface">{{ token.surface }}</span>
             {% else %}
               <a
-                class="block"
+                class="token-surface"
                 href="{{ token.lemma | lemma_url(language) }}"
               >{{ token.surface }}</a>
             {% endif %}
             {% if is_punct %}
-              <span class="gloss block text-muted text-sm font-normal">&nbsp;</span>
+              <span class="gloss token-gloss">&nbsp;</span>
             {% else %}
-              <span class="gloss block text-muted text-sm font-normal">
+              <span class="gloss token-gloss">
                 {% if token.tags %}
                   {{ token.translation }}.{{ token.tags | join('.') }}
                 {% else %}
@@ -28,21 +28,21 @@
         {%- endfor %}
       </div>
 
-      <div class="mt-8 pt-6 border-t border-[color:var(--border-light)]">
-        <p class="section-title mb-2">Natural translation</p>
-        <p class="text-lg text-secondary leading-relaxed">
+      <div class="sentence-translation">
+        <p class="section-title section-title--tight">Natural translation</p>
+        <p class="sentence-translation__text">
           {{ content.natural_english_translation }}
         </p>
       </div>
     {% else %}
-      <div class="text-lg font-semibold">{{ sentence.text }}</div>
+      <div class="sentence-fallback">{{ sentence.text }}</div>
     {% endif %}
   </div>
 
   {% if content and content.proper_nouns %}
-    <div class="mb-8">
-      <h2 class="section-title mb-4">Proper nouns</h2>
-      <div class="space-y-3">
+    <div class="content-section">
+      <h2 class="section-title section-title--spaced">Proper nouns</h2>
+      <div class="info-list">
         {% for item in content.proper_nouns %}
           <div class="info-card">
             <p class="info-card-title">{{ item.nominative }}</p>
@@ -54,9 +54,9 @@
   {% endif %}
 
   {% if content and content.grammar_notes %}
-    <div class="mb-8">
-      <h2 class="section-title mb-4">Grammar notes</h2>
-      <div class="space-y-3">
+    <div class="content-section">
+      <h2 class="section-title section-title--spaced">Grammar notes</h2>
+      <div class="info-list">
         {% for item in content.grammar_notes %}
           <div class="info-card">
             <p class="info-card-title">{{ item.title }}</p>
@@ -67,14 +67,14 @@
     </div>
   {% endif %}
 
-  <div class="action-bar mt-8">
+  <div class="action-bar action-bar--spaced">
     {% if error %}
-      <div class="w-full mb-4 p-3 bg-[color:var(--danger-light)] text-[color:var(--danger)] rounded-lg text-sm">
+      <div class="alert alert-danger action-alert">
         {{ error }}
       </div>
     {% endif %}
 
-    <div class="flex flex-wrap items-center gap-3">
+    <div class="action-row">
       {% set target_id = "sentence-favorite-" ~ sentence.id %}
       {% set action = url_for('sentence_favorite', lang=language, hash_slug=sentence.hash) %}
       {% include "partials/favorite_star.html" %}
@@ -86,7 +86,7 @@
         hx-target="#sentence-content"
         hx-swap="outerHTML"
         hx-push-url="false"
-        class="flex flex-wrap items-center gap-2"
+        class="action-form"
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <select
@@ -108,11 +108,11 @@
         </button>
       </form>
 
-      <span class="text-xs text-muted">
+      <span class="action-hint">
         Generated with {{ content.model_used if content else 'unknown' }}
       </span>
 
-      <form method="post" action="{{ url_for('sentence_delete', lang=language, hash_slug=sentence.hash) }}" class="ml-auto">
+      <form method="post" action="{{ url_for('sentence_delete', lang=language, hash_slug=sentence.hash) }}" class="action-spacer">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
         <button type="submit" class="btn btn-danger btn-sm">Delete</button>
       </form>

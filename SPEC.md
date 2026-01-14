@@ -26,13 +26,13 @@ A local web application for learning a foreign language (initially Slovenian) ai
 | Component        | Technology                          |
 |------------------|-------------------------------------|
 | Back-end         | Flask (Python)                      |
-| Front-end        | HTML, Tailwind CSS, HTMX            |
+| Front-end        | HTML, custom CSS, HTMX              |
 | Database         | SQLite                              |
 | Program / deps   | `uv` (`pyproject.toml`)             |
 | Forms / CSRF     | Flask-WTF (CSRFProtect)             |
 | RSS fetching     | `requests` + `feedparser`           |
 | Content generation | LLM (OpenAI; default model `gpt-4o`) |
-| CSS build        | Tailwind CSS standalone CLI         |
+| CSS build        | None (plain CSS in `static/output.css`) |
 
 ---
 
@@ -268,9 +268,9 @@ The canonical dictionary form of a token.
 - **Logo**: Simple logo/app name in header.
 - **Footer**: Display app version (read from `pyproject.toml`).
 
-### CSS Framework
+### CSS Styling
 
-- Tailwind CSS using the standalone CLI (not npm).
+- Plain CSS in `static/output.css` (no build step).
 - Single light theme only (no dark mode).
 
 ### Loading States

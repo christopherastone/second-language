@@ -1,19 +1,19 @@
-<div id="sentence-list" class="space-y-3 stagger">
+<div id="sentence-list" class="sentence-list stagger">
   {% for sentence in sentences %}
     <div class="sentence-item">
-      <div class="flex-shrink-0 mt-0.5">
+      <div class="sentence-item__star">
         {% if sentence.is_favorite %}
           <span class="star star-filled" aria-label="favorited">&#9733;</span>
         {% else %}
           <span class="star star-empty" aria-label="not favorited">&#9734;</span>
         {% endif %}
       </div>
-      <div class="flex-1 min-w-0">
-        <a class="link text-base font-medium leading-relaxed" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
+      <div class="sentence-item__content">
+        <a class="link sentence-item__link" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
           {{ sentence.text }}
         </a>
         {% if sentence.article_link or sentence.access_count > 0 %}
-          <span class="text-xs text-muted ml-2">
+          <span class="sentence-meta">
             (
             {% if sentence.article_link %}
               <a class="link" href="{{ sentence.article_link }}" target="_blank" rel="noopener noreferrer">link</a>{% if sentence.access_count > 0 %},{% endif %}
@@ -27,9 +27,9 @@
       </div>
     </div>
   {% else %}
-    <div class="card p-8 text-center">
-      <p class="text-muted">No sentences yet.</p>
-      <p class="text-sm text-muted mt-2">Click "Update" to fetch new headlines.</p>
+    <div class="card empty-state">
+      <p class="empty-state__title">No sentences yet.</p>
+      <p class="empty-state__hint">Click "Update" to fetch new headlines.</p>
     </div>
   {% endfor %}
 </div>

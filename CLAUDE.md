@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Technology Stack
 
 - **Back-end**: Flask (Python)
-- **Front-end**: HTML, Tailwind CSS (standalone CLI), HTMX
+- **Front-end**: HTML, custom CSS, HTMX
 - **Database**: SQLite
 - **Package management**: `uv` with `pyproject.toml`
 - **Forms/CSRF**: Flask-WTF (CSRFProtect)
@@ -22,8 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Install dependencies
 uv sync
 
-# Build Tailwind CSS
-tailwindcss -i input.css -o static/output.css
+# CSS lives in static/output.css (no build step)
 
 # Initialize database
 uv run python init_db.py

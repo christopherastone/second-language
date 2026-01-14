@@ -1,27 +1,27 @@
 <div id="lemma-content" class="fade-in">
-  <div class="card p-8 mb-8">
+  <div class="card card-section">
     <div class="focus-title">
       {{ content.lemma if content else lemma_display }}
     </div>
     {% if content %}
-      <p class="text-lg text-secondary mt-3">{{ content.translation }}</p>
+      <p class="lemma-translation">{{ content.translation }}</p>
     {% endif %}
   </div>
 
   {% if content and content.related_words %}
-    <div class="mb-8">
-      <h2 class="section-title mb-4">Related words</h2>
-      <div class="card divide-y divide-[color:var(--border-light)]">
+    <div class="content-section">
+      <h2 class="section-title section-title--spaced">Related words</h2>
+      <div class="card list-card">
         {% for item in content.related_words %}
-          <div class="p-4">
-            <div class="flex items-baseline gap-2">
-              <a class="link font-medium" href="{{ item.normalized_lemma | lemma_url(language) }}">
+          <div class="list-row list-row--stacked">
+            <div class="list-row__heading">
+              <a class="link list-row__link" href="{{ item.normalized_lemma | lemma_url(language) }}">
                 {{ item.word }}
               </a>
-              <span class="text-muted text-sm">({{ item.translation }})</span>
+              <span class="list-row__meta">({{ item.translation }})</span>
             </div>
             {% if item.note %}
-              <p class="text-sm text-secondary mt-1">{{ item.note }}</p>
+              <p class="list-row__note">{{ item.note }}</p>
             {% endif %}
           </div>
         {% endfor %}
@@ -30,12 +30,12 @@
   {% endif %}
 
   {% if sentences %}
-    <div class="mb-8">
-      <h2 class="section-title mb-4">Sentences containing this lemma</h2>
-      <div class="card divide-y divide-[color:var(--border-light)]">
+    <div class="content-section">
+      <h2 class="section-title section-title--spaced">Sentences containing this lemma</h2>
+      <div class="card list-card">
         {% for sentence in sentences %}
-          <div class="p-4">
-            <a class="link" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
+          <div class="list-row">
+            <a class="link list-row__link" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
               {{ sentence.text }}
             </a>
           </div>
@@ -44,14 +44,14 @@
     </div>
   {% endif %}
 
-  <div class="action-bar mt-8">
+  <div class="action-bar action-bar--spaced">
     {% if error %}
-      <div class="w-full mb-4 p-3 bg-[color:var(--danger-light)] text-[color:var(--danger)] rounded-lg text-sm">
+      <div class="alert alert-danger action-alert">
         {{ error }}
       </div>
     {% endif %}
 
-    <div class="flex flex-wrap items-center gap-3">
+    <div class="action-row">
       {% set target_id = "lemma-favorite-" ~ lemma_id %}
       {% set action = url_for('lemma_favorite', lang=language, lemma=lemma_text) %}
       {% include "partials/favorite_star.html" %}
@@ -63,7 +63,7 @@
         hx-target="#lemma-content"
         hx-swap="outerHTML"
         hx-push-url="false"
-        class="flex flex-wrap items-center gap-2"
+        class="action-form"
         hx-disabled-elt="button"
         hx-on:htmx:beforeRequest="const btn=this.querySelector('button'); btn.dataset.label=btn.innerText; btn.innerText='Regenerating...'; btn.setAttribute('aria-busy','true');"
         hx-on:htmx:afterRequest="const btn=this.querySelector('button'); btn.innerText=btn.dataset.label || 'Regenerate'; btn.removeAttribute('aria-busy');"
@@ -83,7 +83,7 @@
         </button>
       </form>
 
-      <span class="text-xs text-muted">
+      <span class="action-hint">
         Generated with {{ content.model_used if content else 'unknown' }}
       </span>
     </div>
