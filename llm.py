@@ -363,7 +363,10 @@ def _normalize_lemma_payload(payload: dict[str, Any]) -> None:
         normalized_lemma = item.get("normalized_lemma")
         translation = item.get("translation")
         note = item.get("note")
-        if not all(isinstance(value, str) and value.strip() for value in (word, normalized_lemma, translation, note)):
+        if not all(
+            isinstance(value, str) and value.strip()
+            for value in (word, normalized_lemma, translation, note)
+        ):
             continue
         normalized_related.append(
             {
@@ -410,15 +413,16 @@ LEMMA_SYSTEM_PROMPT = (
     "You are a careful linguist producing JSON for a language learning app. "
     "Return only JSON that matches the required schema. Do not include any extra keys. "
     "Provide translation as a single English string. If the word is polysemous, "
-    "combine 2-3 meanings into one string separated by semicolons (e.g., \"firm; steady; certain\"). "
-    "Related words must be linguistically relevant, not inflected forms of the lemma, "
+    'combine 2-3 meanings into one string separated by semicolons (e.g., "firm; steady; certain"). '
+    "Related words must be linguistically relevant, "
     "and include a short note explaining the relationship. "
     "Include up to 8 related entries; each must include word, normalized_lemma, translation, and note, "
     "and can be a phrase. "
-    "Prefer near-synonyms, useful contrasts, false friends, or etymologically related forms; "
+    "Prefer etymologically related forms, false friends, near-synonyms, useful contrasts; "
     "only claim etymological relationships when you are confident—otherwise describe it as a related concept "
     "or contrast instead of asserting shared origin. "
-    "exclude identical lemma variants or mere inflections."
+    "All related words must be in the target language provided in the prompt; omit any entry you are not sure belongs. "
+    "Exclude identical lemma variants or mere inflections."
 )
 
 
@@ -492,6 +496,7 @@ def generate_lemma_content(
         f"Language: {language}\n"
         f"Lemma: {lemma}\n"
         f"Normalized lemma (must match exactly): {normalized_lemma}\n\n"
+        "All related words must be in the target language above.\n"
         "Output JSON with keys: lemma, normalized_lemma, translation, related_words."
     )
 

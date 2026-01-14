@@ -3,7 +3,7 @@ import logging
 import threading
 import time
 from datetime import datetime, timedelta, timezone
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from flask import (
     Flask,
@@ -570,7 +570,8 @@ def sentence_delete(lang: str, hash_slug: str):
 @app.route("/<lang>/lemma/<lemma>")
 def lemma_detail(lang: str, lemma: str):
     language = require_language(lang)
-    normalized = normalize_text(lemma)
+    lemma_display = unquote(lemma)
+    normalized = normalize_text(lemma_display)
     db = get_db()
     row = db.execute(
         "SELECT * FROM lemmas WHERE language = ? AND normalized_lemma = ?",
@@ -664,6 +665,7 @@ def lemma_detail(lang: str, lemma: str):
         "lemma_detail.html",
         language=language,
         lemma_text=normalized,
+        lemma_display=lemma_display,
         lemma_id=row["id"],
         content=content,
         error=error,
@@ -675,7 +677,8 @@ def lemma_detail(lang: str, lemma: str):
 @app.post("/<lang>/lemma/<lemma>/regenerate")
 def lemma_regenerate(lang: str, lemma: str):
     language = require_language(lang)
-    normalized = normalize_text(lemma)
+    lemma_display = unquote(lemma)
+    normalized = normalize_text(lemma_display)
     model = ensure_model(request.form.get("model"))
     session["model_choice"] = model
     session["model_choice_source"] = "user"
@@ -723,6 +726,7 @@ def lemma_regenerate(lang: str, lemma: str):
         "partials/lemma_content.html",
         language=language,
         lemma_text=normalized,
+        lemma_display=lemma_display,
         lemma_id=row["id"],
         content=content,
         error=error,

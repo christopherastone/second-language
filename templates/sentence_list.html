@@ -1,8 +1,12 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-  <h1 class="text-xl font-semibold">Sentences ({{ language }})</h1>
+<div class="mb-6 fade-in">
+  <div class="flex items-center justify-between flex-wrap gap-4">
+    <div>
+      <h1 class="page-title">Sentences</h1>
+      <div class="text-sm text-[color:var(--muted)]">Language: {{ language }}</div>
+    </div>
   <form
     method="post"
     action="{{ url_for('update_sentences', lang=language) }}"
@@ -10,10 +14,14 @@
     hx-target="#sentence-list"
     hx-swap="outerHTML"
     hx-push-url="false"
+    hx-disabled-elt="button"
+    hx-on:htmx:beforeRequest="const btn=this.querySelector('button'); btn.dataset.label=btn.innerText; btn.innerText='Updating...'; btn.setAttribute('aria-busy','true');"
+    hx-on:htmx:afterRequest="const btn=this.querySelector('button'); btn.innerText=btn.dataset.label || 'Update'; btn.removeAttribute('aria-busy');"
   >
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-    <button class="bg-slate-900 text-white rounded px-3 py-1.5" type="submit">Update</button>
+    <button class="btn btn-primary" type="submit">Update</button>
   </form>
+</div>
 </div>
 
 {% include "partials/sentence_list_inner.html" %}

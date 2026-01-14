@@ -2,7 +2,9 @@ import hashlib
 import html
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from itertools import islice
 
 import feedparser
 import requests
@@ -10,6 +12,7 @@ import requests
 from config import (
     DEFAULT_MODEL,
     MAX_RSS_NEW_SENTENCES,
+    RSS_LLM_CONCURRENCY,
     SENTENCE_SCHEMA_VERSION,
     enabled_feeds,
 )
@@ -43,8 +46,7 @@ def _article_id(entry: dict) -> str:
     return hashlib.sha256(repr(entry).encode("utf-8")).hexdigest()
 
 
-def update_from_feeds(language: str, feeds: list[dict], db) -> int:
-    new_count = 0
+def _iter_candidates(language: str, feeds: list[dict], db):
     for feed in enabled_feeds(language, feeds):
         logger.info(
             "Fetching feed language=%s id=%s url=%s", language, feed["id"], feed["url"]
@@ -57,9 +59,6 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
             logger.warning("Feed fetch failed language=%s id=%s", language, feed["id"])
             continue
         for entry in parsed.entries:
-            logger.debug("Processing feed entry: %s", entry)
-            if new_count >= MAX_RSS_NEW_SENTENCES:
-                return new_count
             article_id = _article_id(entry)
             exists = db.execute(
                 "SELECT 1 FROM rss_articles WHERE article_id = ?", (article_id,)
@@ -69,7 +68,6 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
             headline = _clean_headline(entry.get("title", ""))
             if not headline:
                 continue
-            logger.info(headline)
             sentence_hash = hash_sentence(headline)
             sentence_exists = db.execute(
                 "SELECT 1 FROM sentences WHERE language = ? AND hash = ?",
@@ -82,48 +80,77 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
                 )
                 db.commit()
                 continue
-            try:
-                payload = generate_sentence_content(language, headline, DEFAULT_MODEL)
-            except (LLMRequestError, LLMOutputError):
-                logger.warning("LLM failed during RSS import language=%s", language)
-                continue
-            created_at = utc_now()
-            logger.info("Loading into database.")
-            db.execute(
-                """
-                INSERT INTO sentences (
-                    language, hash, text, gloss_json, proper_nouns_json, grammar_notes_json,
-                    natural_translation, model_used, schema_version, access_count, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                """,
-                (
+            yield {
+                "article_id": article_id,
+                "headline": headline,
+                "sentence_hash": sentence_hash,
+            }
+
+
+def update_from_feeds(language: str, feeds: list[dict], db) -> int:
+    new_count = 0
+    candidates = _iter_candidates(language, feeds, db)
+    while new_count < MAX_RSS_NEW_SENTENCES:
+        batch = list(islice(candidates, RSS_LLM_CONCURRENCY))
+        if not batch:
+            break
+        with ThreadPoolExecutor(max_workers=RSS_LLM_CONCURRENCY) as executor:
+            future_map = {
+                executor.submit(
+                    generate_sentence_content, language, item["headline"], DEFAULT_MODEL
+                ): item
+                for item in batch
+            }
+            for future in as_completed(future_map):
+                item = future_map[future]
+                try:
+                    payload = future.result()
+                except (LLMRequestError, LLMOutputError):
+                    logger.warning("LLM failed during RSS import language=%s", language)
+                    continue
+                if new_count >= MAX_RSS_NEW_SENTENCES:
+                    continue
+                created_at = utc_now()
+                logger.info("Loading into database.")
+                db.execute(
+                    """
+                    INSERT INTO sentences (
+                        language, hash, text, gloss_json, proper_nouns_json, grammar_notes_json,
+                        natural_translation, model_used, schema_version, access_count, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                    """,
+                    (
+                        language,
+                        item["sentence_hash"],
+                        item["headline"],
+                        json_dumps(payload["tokens"]),
+                        json_dumps(payload["proper_nouns"]),
+                        json_dumps(payload["grammar_notes"]),
+                        payload["natural_english_translation"],
+                        payload["model_used"],
+                        SENTENCE_SCHEMA_VERSION,
+                        created_at,
+                        created_at,
+                    ),
+                )
+                sentence_id = db.execute(
+                    "SELECT id FROM sentences WHERE language = ? AND hash = ?",
+                    (language, item["sentence_hash"]),
+                ).fetchone()["id"]
+                _refresh_sentence_lemmas(db, language, sentence_id, payload["tokens"])
+                db.execute(
+                    "INSERT OR IGNORE INTO rss_articles(article_id) VALUES (?)",
+                    (item["article_id"],),
+                )
+                db.commit()
+                new_count += 1
+                logger.info(
+                    "RSS sentence inserted language=%s hash=%s",
                     language,
-                    sentence_hash,
-                    headline,
-                    json_dumps(payload["tokens"]),
-                    json_dumps(payload["proper_nouns"]),
-                    json_dumps(payload["grammar_notes"]),
-                    payload["natural_english_translation"],
-                    payload["model_used"],
-                    SENTENCE_SCHEMA_VERSION,
-                    created_at,
-                    created_at,
-                ),
-            )
-            sentence_id = db.execute(
-                "SELECT id FROM sentences WHERE language = ? AND hash = ?",
-                (language, sentence_hash),
-            ).fetchone()["id"]
-            _refresh_sentence_lemmas(db, language, sentence_id, payload["tokens"])
-            db.execute(
-                "INSERT OR IGNORE INTO rss_articles(article_id) VALUES (?)",
-                (article_id,),
-            )
-            db.commit()
-            new_count += 1
-            logger.info(
-                "RSS sentence inserted language=%s hash=%s", language, sentence_hash
-            )
+                    item["sentence_hash"],
+                )
+        if new_count >= MAX_RSS_NEW_SENTENCES:
+            break
     return new_count
 
 

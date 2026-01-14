@@ -1,39 +1,40 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="space-y-8">
+<div class="space-y-8 fade-in">
   <div>
-    <h1 class="text-xl font-semibold mb-4">Favorites</h1>
+    <h1 class="page-title mb-2">Favorites</h1>
+    <p class="text-sm text-[color:var(--muted)]">Your saved sentences and lemmas.</p>
   </div>
 
   <div>
-    <h2 class="text-sm font-semibold text-slate-600 mb-3">Sentences</h2>
+    <h2 class="section-title mb-3">Sentences</h2>
     <ul class="space-y-2">
       {% for sentence in sentence_favorites %}
         <li class="flex items-start gap-2">
-          <span class="text-lg" aria-hidden="true">&#9733;</span>
-          <a class="underline hover:no-underline" href="{{ url_for('sentence_detail', lang=sentence.language, hash_slug=sentence.hash) }}">
+          <span class="text-lg text-[color:var(--accent)]" aria-hidden="true">&#9733;</span>
+          <a class="underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ url_for('sentence_detail', lang=sentence.language, hash_slug=sentence.hash) }}">
             {{ sentence.text }}
           </a>
         </li>
       {% else %}
-        <li class="text-slate-500">No favorited sentences.</li>
+        <li class="text-[color:var(--muted)]">No favorited sentences.</li>
       {% endfor %}
     </ul>
   </div>
 
   <div>
-    <h2 class="text-sm font-semibold text-slate-600 mb-3">Lemmas</h2>
+    <h2 class="section-title mb-3">Lemmas</h2>
     <ul class="space-y-2">
       {% for lemma in lemma_favorites %}
         <li class="flex items-start gap-2">
-          <span class="text-lg" aria-hidden="true">&#9733;</span>
-          <a class="underline hover:no-underline" href="{{ url_for('lemma_detail', lang=lemma.language, lemma=lemma.normalized_lemma) }}">
+          <span class="text-lg text-[color:var(--accent)]" aria-hidden="true">&#9733;</span>
+          <a class="underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ url_for('lemma_detail', lang=lemma.language, lemma=lemma.normalized_lemma) }}">
             {{ lemma.normalized_lemma }}
           </a>
         </li>
       {% else %}
-        <li class="text-slate-500">No favorited lemmas.</li>
+        <li class="text-[color:var(--muted)]">No favorited lemmas.</li>
       {% endfor %}
     </ul>
   </div>

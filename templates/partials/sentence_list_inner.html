@@ -1,7 +1,7 @@
-<div id="sentence-list" class="space-y-3">
+<div id="sentence-list" class="space-y-8 stagger">
   {% for sentence in sentences %}
-    <div class="flex items-start gap-3">
-      <div class="text-lg">
+    <div class="px-1 pb-8 flex items-start gap-4 border-b border-[color:var(--border)]">
+      <div class="text-lg text-[color:var(--accent)]">
         {% if sentence.is_favorite %}
           <span aria-label="favorited">&#9733;</span>
         {% else %}
@@ -9,13 +9,13 @@
         {% endif %}
       </div>
       <div>
-        <a class="underline hover:no-underline" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">{{ sentence.text }}</a>
+        <a class="text-lg font-semibold underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">{{ sentence.text }}</a>
         {% if sentence.access_count > 0 %}
-          <span class="text-xs text-slate-500">({{ sentence.access_count }})</span>
+          <span class="text-xs text-[color:var(--muted)]">({{ sentence.access_count }})</span>
         {% endif %}
       </div>
     </div>
   {% else %}
-    <div class="text-slate-500">No sentences yet.</div>
+    <div class="text-[color:var(--muted)]">No sentences yet.</div>
   {% endfor %}
 </div>

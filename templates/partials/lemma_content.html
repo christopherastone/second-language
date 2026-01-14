@@ -1,24 +1,24 @@
-<div id="lemma-content" class="space-y-6">
-  <div>
-    <div class="text-2xl font-semibold">
-      {{ content.lemma if content else lemma_text }}
+<div id="lemma-content" class="space-y-10 fade-in">
+  <div class="section-block">
+    <div class="focus-title">
+      {{ content.lemma if content else lemma_display }}
     </div>
     {% if content %}
-      <div class="text-slate-600 mt-1">{{ content.translation }}</div>
+      <div class="text-[color:var(--muted)] mt-2">{{ content.translation }}</div>
     {% endif %}
   </div>
 
   {% if content and content.related_words %}
-    <div>
-      <h2 class="text-sm font-semibold text-slate-600 mb-2">Related words</h2>
+    <div class="section-block">
+      <h2 class="section-title mb-3">Related words</h2>
       <ul class="space-y-2">
         {% for item in content.related_words %}
           <li>
-            <a class="underline hover:no-underline" href="{{ item.normalized_lemma | lemma_url(language) }}">
+            <a class="underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ item.normalized_lemma | lemma_url(language) }}">
               {{ item.word }}
             </a>
-            <span class="text-slate-600">({{ item.translation }})</span>
-            <div class="text-xs text-slate-500">{{ item.note }}</div>
+            <span class="text-[color:var(--muted)]">({{ item.translation }})</span>
+            <div class="text-xs text-[color:var(--muted)]">{{ item.note }}</div>
           </li>
         {% endfor %}
       </ul>
@@ -26,12 +26,12 @@
   {% endif %}
 
   {% if sentences %}
-    <div>
-      <h2 class="text-sm font-semibold text-slate-600 mb-2">Sentences containing this lemma</h2>
+    <div class="section-block">
+      <h2 class="section-title mb-3">Sentences containing this lemma</h2>
       <ul class="space-y-2">
         {% for sentence in sentences %}
           <li>
-            <a class="underline hover:no-underline" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
+            <a class="underline decoration-[color:var(--border)] hover:decoration-[color:var(--accent)]" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
               {{ sentence.text }}
             </a>
           </li>
@@ -40,7 +40,7 @@
     </div>
   {% endif %}
 
-  <div class="border-t border-slate-200 pt-4 space-y-3">
+  <div class="pt-6 border-t border-[color:var(--border)] space-y-4">
     {% if error %}
       <div class="text-sm text-red-600">{{ error }}</div>
     {% endif %}
@@ -58,29 +58,27 @@
         hx-swap="outerHTML"
         hx-push-url="false"
         class="flex flex-wrap items-center gap-2"
+        hx-disabled-elt="button"
+        hx-on:htmx:beforeRequest="const btn=this.querySelector('button'); btn.dataset.label=btn.innerText; btn.innerText='Regenerating...'; btn.setAttribute('aria-busy','true');"
+        hx-on:htmx:afterRequest="const btn=this.querySelector('button'); btn.innerText=btn.dataset.label || 'Regenerate'; btn.removeAttribute('aria-busy');"
       >
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <label class="text-sm text-slate-600" for="lemma-model">Model</label>
+        <label class="text-sm text-[color:var(--muted)]" for="lemma-model">Model</label>
         <select
           id="lemma-model"
           name="model"
-          class="border border-slate-300 rounded px-2 py-1 text-sm"
+          class="border border-[color:var(--border)] rounded-full px-3 py-1 text-sm bg-white"
         >
           {% for model in model_choices %}
             <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
           {% endfor %}
         </select>
-        <button
-          type="submit"
-          class="bg-slate-900 text-white rounded px-3 py-1.5"
-          hx-on:htmx:beforeRequest="this.dataset.label=this.innerText; this.innerText='Regenerating...'; this.disabled=true;"
-          hx-on:htmx:afterRequest="this.disabled=false; this.innerText=this.dataset.label || 'Regenerate';"
-        >
+        <button type="submit" class="btn btn-primary">
           {{ "Try again" if error else "Regenerate" }}
         </button>
       </form>
 
-      <div class="text-xs text-slate-500">
+      <div class="text-xs text-[color:var(--muted)]">
         Generated with: {{ content.model_used if content else 'unknown' }}
       </div>
     </div>

@@ -9,9 +9,9 @@
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
     <button type="submit" class="text-xl">
       {% if is_favorite %}
-        <span aria-label="favorited">&#9733;</span>
+        <span aria-label="favorited" class="text-[color:var(--accent)]">&#9733;</span>
       {% else %}
-        <span aria-label="not favorited">&#9734;</span>
+        <span aria-label="not favorited" class="text-[color:var(--muted)]">&#9734;</span>
       {% endif %}
     </button>
   </form>
