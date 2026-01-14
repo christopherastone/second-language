@@ -680,3 +680,34 @@ def generate_lemma_content(
                 continue
             _log_openai_error(model, exc)
             raise LLMRequestError("LLM request failed") from exc
+
+
+def generate_audio(text: str, language: str = "sl") -> bytes:
+    """Generate TTS audio using Google Cloud TTS Chirp3 HD voices."""
+    from google.cloud import texttospeech
+
+    locale_map = {
+        "sl": "sl-SI",
+        "de": "de-DE",
+        "fr": "fr-FR",
+        "es": "es-ES",
+        "it": "it-IT",
+    }
+    language_code = locale_map.get(language, f"{language}-{language.upper()}")
+
+    client = texttospeech.TextToSpeechClient()
+    synthesis_input = texttospeech.SynthesisInput(text=text)
+    voice = texttospeech.VoiceSelectionParams(
+        language_code=language_code,
+        name=f"{language_code}-Chirp3-HD-Kore",
+    )
+    audio_config = texttospeech.AudioConfig(
+        audio_encoding=texttospeech.AudioEncoding.MP3,
+        speaking_rate=0.8,
+    )
+    response = client.synthesize_speech(
+        input=synthesis_input,
+        voice=voice,
+        audio_config=audio_config,
+    )
+    return response.audio_content

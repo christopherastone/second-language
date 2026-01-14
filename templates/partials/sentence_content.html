@@ -28,6 +28,13 @@
         {%- endfor %}
       </div>
 
+      <audio
+        class="sentence-audio"
+        controls
+        preload="none"
+        src="{{ url_for('sentence_audio', lang=language, hash_slug=sentence.hash) }}"
+      ></audio>
+
       <div class="sentence-translation">
         <p class="section-title section-title--tight">Natural translation</p>
         <p class="sentence-translation__text">

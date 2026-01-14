@@ -658,6 +658,13 @@ body {
 }
 
 /* ===== SENTENCE DETAILS ===== */
+.sentence-audio {
+  display: block;
+  width: 100%;
+  margin-top: 1.5rem;
+  border-radius: 8px;
+}
+
 .sentence-translation {
   margin-top: 2rem;
   padding-top: 1.5rem;

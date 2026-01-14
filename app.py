@@ -7,6 +7,7 @@ from urllib.parse import quote, unquote
 
 from flask import (
     Flask,
+    Response,
     abort,
     g,
     redirect,
@@ -30,7 +31,7 @@ from config import (
     require_env,
 )
 from db import close_db, get_db
-from llm import LLMOutputError, LLMRequestError, generate_lemma_content, generate_sentence_content, validate_openai_key
+from llm import LLMOutputError, LLMRequestError, generate_audio, generate_lemma_content, generate_sentence_content, validate_openai_key
 from normalization import normalize_text, token_has_alpha
 from rss import update_from_feeds
 
@@ -565,6 +566,27 @@ def sentence_delete(lang: str, hash_slug: str):
     db.execute("DELETE FROM sentences WHERE id = ?", (row["id"],))
     db.commit()
     return redirect(url_for("sentence_list", lang=language))
+
+
+@app.get("/<lang>/sentence/<hash_slug>/audio")
+def sentence_audio(lang: str, hash_slug: str):
+    language = require_language(lang)
+    db = get_db()
+    row = db.execute(
+        "SELECT id, text, audio_data FROM sentences WHERE language = ? AND hash = ?",
+        (language, hash_slug),
+    ).fetchone()
+    if row is None:
+        abort(404)
+    audio_data = row["audio_data"]
+    if audio_data is None:
+        audio_data = generate_audio(row["text"], language)
+        db.execute(
+            "UPDATE sentences SET audio_data = ? WHERE id = ?",
+            (audio_data, row["id"]),
+        )
+        db.commit()
+    return Response(audio_data, mimetype="audio/mpeg")
 
 
 @app.route("/<lang>/lemma/<lemma>")

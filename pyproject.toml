@@ -10,6 +10,7 @@ dependencies = [
   "openai>=1.40.0",
   "pyyaml>=6.0.1",
   "jsonschema>=4.22.0",
+  "google-cloud-texttospeech>=2.14.0",
 ]
 
 [build-system]

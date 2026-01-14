@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Forms/CSRF**: Flask-WTF (CSRFProtect)
 - **RSS**: `requests` + `feedparser`
 - **LLM**: OpenAI API (default model: `gpt-4o`)
+- **TTS**: Google Cloud Text-to-Speech (native Slovenian voices)
 
 ## Commands
 
@@ -48,6 +49,7 @@ Required (app fails to start if missing):
 | `SECRET_KEY` | Flask session signing key |
 | `DATABASE_PATH` | Not used (path is hard-coded to `./data/app.db`) |
 | `OPENAI_API_KEY` | OpenAI API key (validated via /models endpoint on startup) |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to Google Cloud service account JSON (for TTS) |
 
 ## Architecture
 

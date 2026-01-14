@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS sentences (
   proper_nouns_json TEXT,
   grammar_notes_json TEXT,
   natural_translation TEXT,
+  audio_data BLOB,
   model_used TEXT,
   schema_version INTEGER NOT NULL,
   access_count INTEGER NOT NULL DEFAULT 0,
