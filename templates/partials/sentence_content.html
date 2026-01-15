@@ -7,7 +7,23 @@
         hash_slug=sentence.hash) %}
         {% if content %}
         <div class="sentence-header">
-            <p class="sentence-original">{{ sentence.text }}</p>
+            <div class="sentence-original">
+                <span class="sentence-original__text">{{ sentence.text }}</span>
+                {% if sentence.article_link or sentence.access_count > 0 %}
+                <span class="sentence-meta">
+                    (
+                    {% if sentence.article_link %}
+                    <a class="link" href="{{ sentence.article_link }}" target="_blank"
+                        rel="noopener noreferrer">link</a>{% if sentence.access_count > 0 %},{%
+                    endif %}
+                    {% endif %}
+                    {% if sentence.access_count > 0 %}
+                    {{ sentence.access_count }}
+                    {% endif %}
+                    )
+                </span>
+                {% endif %}
+            </div>
             <div class="sentence-favorite">
                 {% include "partials/favorite_star.html" %}
             </div>
@@ -52,7 +68,23 @@
         </div>
         {% else %}
         <div class="sentence-header">
-            <div class="sentence-fallback">{{ sentence.text }}</div>
+            <div class="sentence-fallback">
+                <span class="sentence-original__text">{{ sentence.text }}</span>
+                {% if sentence.article_link or sentence.access_count > 0 %}
+                <span class="sentence-meta">
+                    (
+                    {% if sentence.article_link %}
+                    <a class="link" href="{{ sentence.article_link }}" target="_blank"
+                        rel="noopener noreferrer">link</a>{% if sentence.access_count > 0 %},{%
+                    endif %}
+                    {% endif %}
+                    {% if sentence.access_count > 0 %}
+                    {{ sentence.access_count }}
+                    {% endif %}
+                    )
+                </span>
+                {% endif %}
+            </div>
             <div class="sentence-favorite">
                 {% include "partials/favorite_star.html" %}
             </div>

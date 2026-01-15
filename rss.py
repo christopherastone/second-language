@@ -54,103 +54,108 @@ def _article_link(entry: dict) -> str | None:
     return cleaned or None
 
 
-def _iter_candidates(language: str, feeds: list[dict], db):
-    """Yield candidate headlines not yet stored in the database."""
-    for feed in enabled_feeds(language, feeds):
-        logger.info(
-            "Fetching feed language=%s id=%s url=%s", language, feed["id"], feed["url"]
-        )
-        try:
-            response = requests.get(feed["url"], timeout=15)
-            response.raise_for_status()
-            parsed = feedparser.parse(response.content)
-        except Exception:
-            logger.warning("Feed fetch failed language=%s id=%s", language, feed["id"])
+def _iter_candidates_for_feed(feed: dict, db):
+    """Yield candidate headlines not yet stored in the database for one feed."""
+    language = feed["language"]
+    logger.info(
+        "Fetching feed language=%s id=%s url=%s", language, feed["id"], feed["url"]
+    )
+    try:
+        response = requests.get(feed["url"], timeout=15)
+        response.raise_for_status()
+        parsed = feedparser.parse(response.content)
+    except Exception:
+        logger.warning("Feed fetch failed language=%s id=%s", language, feed["id"])
+        return
+    for entry in parsed.entries:
+        article_id = _article_id(entry)
+        article_link = _article_link(entry)
+        exists = db.execute(
+            "SELECT 1 FROM rss_articles WHERE article_id = ?", (article_id,)
+        ).fetchone()
+        if exists:
             continue
-        for entry in parsed.entries:
-            article_id = _article_id(entry)
-            article_link = _article_link(entry)
-            exists = db.execute(
-                "SELECT 1 FROM rss_articles WHERE article_id = ?", (article_id,)
-            ).fetchone()
-            if exists:
-                continue
-            headline = _clean_headline(entry.get("title", ""))
-            if not headline:
-                continue
-            sentence_hash = hash_sentence(headline)
-            sentence_exists = db.execute(
-                "SELECT 1 FROM sentences WHERE language = ? AND hash = ?",
-                (language, sentence_hash),
-            ).fetchone()
-            if sentence_exists:
-                db.execute(
-                    "INSERT OR IGNORE INTO rss_articles(article_id) VALUES (?)",
-                    (article_id,),
-                )
-                db.commit()
-                continue
-            yield {
-                "article_id": article_id,
-                "article_link": article_link,
-                "headline": headline,
-                "sentence_hash": sentence_hash,
-                "feed_context": feed.get("context"),
-            }
+        headline = _clean_headline(entry.get("title", ""))
+        if not headline:
+            continue
+        sentence_hash = hash_sentence(headline)
+        sentence_exists = db.execute(
+            "SELECT 1 FROM sentences WHERE language = ? AND hash = ?",
+            (language, sentence_hash),
+        ).fetchone()
+        if sentence_exists:
+            db.execute(
+                "INSERT OR IGNORE INTO rss_articles(article_id) VALUES (?)",
+                (article_id,),
+            )
+            db.commit()
+            continue
+        yield {
+            "article_id": article_id,
+            "article_link": article_link,
+            "headline": headline,
+            "sentence_hash": sentence_hash,
+            "feed_context": feed.get("context"),
+            "language": language,
+        }
 
 
 def update_from_feeds(language: str, feeds: list[dict], db) -> int:
     """Fetch RSS feeds, enqueue LLM processing, and insert new sentences."""
     new_count = 0
-    candidates = _iter_candidates(language, feeds, db)
-    while new_count < MAX_RSS_NEW_SENTENCES:
-        batch = list(islice(candidates, RSS_LLM_CONCURRENCY))
-        if not batch:
-            break
-        with ThreadPoolExecutor(max_workers=RSS_LLM_CONCURRENCY) as executor:
-            future_map = {}
-            for item in batch:
-                feed_context = item.get("feed_context")
-                future = executor.submit(
-                    generate_sentence_content,
-                    language,
-                    item["headline"],
-                    DEFAULT_MODEL,
-                    source_context=feed_context,
-                )
-                future_map[future] = item
-            for future in as_completed(future_map):
-                item = future_map[future]
-                try:
-                    payload = future.result()
-                except (LLMRequestError, LLMOutputError):
-                    logger.warning("LLM failed during RSS import language=%s", language)
-                    continue
-                if new_count >= MAX_RSS_NEW_SENTENCES:
-                    continue
-                created_at = utc_now()
-                logger.info("Loading into database.")
-                insert_sentence_from_payload(
-                    db,
-                    language=language,
-                    sentence_hash=item["sentence_hash"],
-                    text=item["headline"],
-                    article_link=item["article_link"],
-                    source_context=item.get("feed_context"),
-                    payload=payload,
-                    created_at=created_at,
-                )
-                db.execute(
-                    "INSERT OR IGNORE INTO rss_articles(article_id) VALUES (?)",
-                    (item["article_id"],),
-                )
-                db.commit()
-                new_count += 1
-                logger.info(
-                    "RSS sentence inserted language=%s hash=%s",
-                    language,
-                    item["sentence_hash"],
-                )
-        if new_count >= MAX_RSS_NEW_SENTENCES:
-            break
+    for feed in enabled_feeds(language, feeds):
+        candidates = _iter_candidates_for_feed(feed, db)
+        feed_count = 0
+        while feed_count < MAX_RSS_NEW_SENTENCES:
+            batch = list(islice(candidates, RSS_LLM_CONCURRENCY))
+            if not batch:
+                break
+            with ThreadPoolExecutor(max_workers=RSS_LLM_CONCURRENCY) as executor:
+                future_map = {}
+                for item in batch:
+                    feed_context = item.get("feed_context")
+                    future = executor.submit(
+                        generate_sentence_content,
+                        item["language"],
+                        item["headline"],
+                        DEFAULT_MODEL,
+                        source_context=feed_context,
+                    )
+                    future_map[future] = item
+                for future in as_completed(future_map):
+                    item = future_map[future]
+                    try:
+                        payload = future.result()
+                    except (LLMRequestError, LLMOutputError):
+                        logger.warning(
+                            "LLM failed during RSS import language=%s",
+                            item["language"],
+                        )
+                        continue
+                    if feed_count >= MAX_RSS_NEW_SENTENCES:
+                        continue
+                    created_at = utc_now()
+                    logger.info("Loading into database.")
+                    insert_sentence_from_payload(
+                        db,
+                        language=item["language"],
+                        sentence_hash=item["sentence_hash"],
+                        text=item["headline"],
+                        article_link=item["article_link"],
+                        source_context=item.get("feed_context"),
+                        payload=payload,
+                        created_at=created_at,
+                    )
+                    db.execute(
+                        "INSERT OR IGNORE INTO rss_articles(article_id) VALUES (?)",
+                        (item["article_id"],),
+                    )
+                    db.commit()
+                    new_count += 1
+                    feed_count += 1
+                    logger.info(
+                        "RSS sentence inserted language=%s hash=%s",
+                        item["language"],
+                        item["sentence_hash"],
+                    )
     return new_count

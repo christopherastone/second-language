@@ -617,6 +617,7 @@ def require_login():
     if not session.get("logged_in"):
         return redirect(url_for("login"))
     session.setdefault("show_glosses", True)
+    session.setdefault("show_translations", True)
     if session.get("model_choice_source") != "user":
         session["model_choice"] = DEFAULT_MODEL
         session["model_choice_source"] = "default"
@@ -636,9 +637,12 @@ def inject_globals():
         "languages": get_language_list(),
         "default_language": settings["default_language"],
         "show_glosses": session.get("show_glosses", True),
+        "show_translations": session.get("show_translations", True),
         "model_choices": MODEL_CHOICES,
         "selected_model": session.get("model_choice", DEFAULT_MODEL),
         "selected_chat_model": session.get("chat_model_choice", DEFAULT_MODEL),
+        "show_gloss_toggle": True,
+        "show_translations_toggle": False,
     }
 
 
@@ -680,7 +684,13 @@ def root():
 def sentence_list(lang: str):
     language = require_language(lang)
     sentences = fetch_sentence_list(language)
-    return render_template("sentence_list.html", language=language, sentences=sentences)
+    return render_template(
+        "sentence_list.html",
+        language=language,
+        sentences=sentences,
+        show_translations_toggle=True,
+        show_gloss_toggle=False,
+    )
 
 
 @app.post("/<lang>/update")
@@ -1160,6 +1170,15 @@ def toggle_glosses():
     show = not session.get("show_glosses", True)
     session["show_glosses"] = show
     return render_template("partials/gloss_toggle.html", show_glosses=show)
+
+
+@app.post("/toggle-translations")
+def toggle_translations():
+    show = not session.get("show_translations", True)
+    session["show_translations"] = show
+    return render_template(
+        "partials/translations_toggle.html", show_translations=show
+    )
 
 
 @app.route("/favorites")

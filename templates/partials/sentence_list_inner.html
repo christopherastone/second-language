@@ -36,6 +36,9 @@
             )
           </span>
         {% endif %}
+        {% if sentence.natural_translation %}
+          <p class="sentence-item__translation">{{ sentence.natural_translation }}</p>
+        {% endif %}
       </div>
     </div>
   {% else %}

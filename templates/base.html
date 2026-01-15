@@ -9,7 +9,7 @@
     <link rel="icon" href="{{ url_for('favicon') }}" />
     <script src="https://unpkg.com/htmx.org@1.9.12"></script>
   </head>
-  <body class="app-body {{ 'hide-glosses' if not show_glosses else '' }}">
+  <body class="app-body {{ 'hide-glosses' if not show_glosses else '' }} {{ 'hide-translations' if not show_translations else '' }}">
     <div class="page-shell">
       <header class="site-header fade-in">
         <div class="site-header__inner">
@@ -33,7 +33,11 @@
               </svg>
               Favorites
             </a>
-            {% include "partials/gloss_toggle.html" %}
+            {% if show_translations_toggle %}
+              {% include "partials/translations_toggle.html" %}
+            {% elif show_gloss_toggle %}
+              {% include "partials/gloss_toggle.html" %}
+            {% endif %}
           </nav>
           {% endif %}
         </div>
@@ -60,6 +64,10 @@
         if (event.target && event.target.id === "gloss-class") {
           const show = event.target.dataset.showGlosses === "1";
           document.body.classList.toggle("hide-glosses", !show);
+        }
+        if (event.target && event.target.id === "translations-class") {
+          const show = event.target.dataset.showTranslations === "1";
+          document.body.classList.toggle("hide-translations", !show);
         }
       });
 

@@ -497,6 +497,17 @@ body {
   line-height: 1.6;
 }
 
+.sentence-item__translation {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.hide-translations .sentence-item__translation {
+  display: none;
+}
+
 .sentence-meta {
   font-size: 1rem;
   color: var(--muted);
@@ -773,6 +784,10 @@ body {
   font-weight: 600;
   color: var(--ink);
   margin: 0;
+}
+
+.sentence-original__text {
+  margin-right: 0.5rem;
 }
 
 .sentence-header {

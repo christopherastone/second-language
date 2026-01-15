@@ -2,4 +2,9 @@
   url: https://www.slovenskenovice.si/rss
   language: sl
   enabled: true
-  context: News articles from Ljubljana, Slovenia.
+  context: Articles from Slovenske Novice in Ljubljana, Slovenia.
+- id: zurnal24
+  url: https://www.zurnal24.si/feeds/latest
+  language: sl
+  enabled: true
+  context: News from Žurnal in Ljubljana, Slovenia

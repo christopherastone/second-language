@@ -276,9 +276,14 @@ def _request_raw_text(
             "model": model,
             "input": user_prompt,
             "instructions": system_prompt,
+            "prompt_cache_key": "second_language_app_v1",
         }
         if use_text_format and text_format:
             params["text"] = {"format": text_format}
+        if model.startswith("gpt-5.1") or model.startswith("gpt-5.2"):
+            params["reasoning"] = {"effort": "none"}
+        elif model == "gpt-5" or model.startswith("gpt-5-"):
+            params["reasoning"] = {"effort": "minimal"}
         return client.responses.create(**params)
 
     try:
@@ -292,7 +297,11 @@ def _request_raw_text(
     logger.info("LLM response received model=%s", model)
     text = _extract_output_text(response)
     elapsed = time.monotonic() - start
-    logger.info("LLM request completed model=%s elapsed=%.2fs", model, elapsed)
+    logger.info(
+        "LLM request completed model=%s elapsed=%.2fs",
+        model,
+        elapsed,
+    )
     return text
 
 
@@ -552,14 +561,16 @@ LEMMA_SYSTEM_PROMPT = (
 SENTENCE_CHAT_SYSTEM_PROMPT = (
     "You are a concise, helpful language tutor. "
     "Answer the user's latest message about the sentence using the provided context. "
-    "Respond in English. Do not output JSON or restate the full context. "
+    "Respond in English only, even if the user writes in another language. "
+    "Do not output JSON or restate the full context. "
     "If the question is unrelated or the answer is uncertain, say so briefly."
 )
 
 LEMMA_CHAT_SYSTEM_PROMPT = (
     "You are a concise, helpful language tutor. "
     "Answer the user's latest message about the lemma using the provided context. "
-    "Respond in English. Do not output JSON or restate the full context. "
+    "Respond in English only, even if the user writes in another language. "
+    "Do not output JSON or restate the full context. "
     "If the question is unrelated or the answer is uncertain, say so briefly."
 )
 
@@ -755,8 +766,12 @@ def generate_sentence_chat_reply(
 ) -> str:
     model = model or DEFAULT_MODEL
     tokens_block = _format_tokens(content.get("tokens", []))
-    proper_block = _format_named_list(content.get("proper_nouns", []), "nominative", "definition")
-    grammar_block = _format_named_list(content.get("grammar_notes", []), "title", "note")
+    proper_block = _format_named_list(
+        content.get("proper_nouns", []), "nominative", "definition"
+    )
+    grammar_block = _format_named_list(
+        content.get("grammar_notes", []), "title", "note"
+    )
     chat_block = _format_chat_history(chat_messages)
 
     user_prompt = (

@@ -6,8 +6,16 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-MODEL_CHOICES = ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-4.1", "gpt-4o"]
-DEFAULT_MODEL = "gpt-4o"
+MODEL_CHOICES = [
+    "gpt-5.2",
+    "gpt-5.1",
+    "gpt-5-nano",
+    "gpt-5-mini",
+    "gpt-5",
+    "gpt-4.1",
+    "gpt-4o",
+]
+DEFAULT_MODEL = "gpt-5.1"
 DEFAULT_DATABASE_PATH = "./data/app.db"
 
 SENTENCE_SCHEMA_VERSION = 1
