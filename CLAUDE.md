@@ -91,8 +91,8 @@ You can place these in a `.env` file in the repo root (see `.env.example`).
 ### Database Tables
 
 - `settings` - password_hash, default_language (single row, id=1)
-- `sentences` - language, hash (16 chars), text, gloss_json, proper_nouns_json, grammar_notes_json, model_used, schema_version, access_count
-- `lemmas` - language, normalized_lemma, translation, related_words_json, audio_data, model_used, schema_version, access_count
+- `sentences` - language, hash (16 chars), text, article_link, source_context, gloss_json, proper_nouns_json, grammar_notes_json, chat_json, model_used, schema_version, access_count
+- `lemmas` - language, normalized_lemma, translation, related_words_json, chat_json, audio_data, model_used, schema_version, access_count
 - `rss_articles` - feed_id, article_id (deduplication, kept on sentence delete)
 - `favorites` - item_type, item_id, created_at
 

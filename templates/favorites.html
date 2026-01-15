@@ -14,12 +14,16 @@
         <div class="card list-card">
           {% for sentence in sentence_favorites %}
             <div class="list-row">
-              <span class="star star-filled list-row__icon" aria-hidden="true">&#9733;</span>
+              <div class="list-row__icon">
+                {% set target_id = "sentence-favorite-favorites-" ~ sentence.id %}
+                {% set action = url_for('sentence_favorite', lang=sentence.language, hash_slug=sentence.hash) %}
+                {% set is_favorite = true %}
+                {% include "partials/favorite_star.html" %}
+              </div>
               <div class="list-row__content">
                 <a class="link list-row__link" href="{{ url_for('sentence_detail', lang=sentence.language, hash_slug=sentence.hash) }}">
                   {{ sentence.text }}
                 </a>
-                <span class="lang-badge lang-badge--small">{{ sentence.language }}</span>
               </div>
             </div>
           {% endfor %}
@@ -38,12 +42,16 @@
         <div class="card list-card">
           {% for lemma in lemma_favorites %}
             <div class="list-row">
-              <span class="star star-filled list-row__icon" aria-hidden="true">&#9733;</span>
+              <div class="list-row__icon">
+                {% set target_id = "lemma-favorite-favorites-" ~ lemma.id %}
+                {% set action = url_for('lemma_favorite', lang=lemma.language, lemma=lemma.normalized_lemma) %}
+                {% set is_favorite = true %}
+                {% include "partials/favorite_star.html" %}
+              </div>
               <div class="list-row__content">
                 <a class="link list-row__link" href="{{ url_for('lemma_detail', lang=lemma.language, lemma=lemma.normalized_lemma) }}">
                   {{ lemma.normalized_lemma }}
                 </a>
-                <span class="lang-badge lang-badge--small">{{ lemma.language }}</span>
               </div>
             </div>
           {% endfor %}

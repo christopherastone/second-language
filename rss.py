@@ -95,6 +95,7 @@ def _iter_candidates(language: str, feeds: list[dict], db):
                 "article_link": article_link,
                 "headline": headline,
                 "sentence_hash": sentence_hash,
+                "feed_context": feed.get("context"),
             }
 
 
@@ -107,12 +108,17 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
         if not batch:
             break
         with ThreadPoolExecutor(max_workers=RSS_LLM_CONCURRENCY) as executor:
-            future_map = {
-                executor.submit(
-                    generate_sentence_content, language, item["headline"], DEFAULT_MODEL
-                ): item
-                for item in batch
-            }
+            future_map = {}
+            for item in batch:
+                feed_context = item.get("feed_context")
+                future = executor.submit(
+                    generate_sentence_content,
+                    language,
+                    item["headline"],
+                    DEFAULT_MODEL,
+                    source_context=feed_context,
+                )
+                future_map[future] = item
             for future in as_completed(future_map):
                 item = future_map[future]
                 try:
@@ -130,6 +136,7 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
                     sentence_hash=item["sentence_hash"],
                     text=item["headline"],
                     article_link=item["article_link"],
+                    source_context=item.get("feed_context"),
                     payload=payload,
                     created_at=created_at,
                 )

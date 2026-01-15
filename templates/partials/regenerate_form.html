@@ -4,12 +4,7 @@
   select_id,
   model_choices,
   selected_model,
-  error,
-  extra_prompt_name=None,
-  extra_prompt_value="",
-  extra_prompt_id=None,
-  extra_prompt_label="Extra grammar questions (optional)",
-  extra_prompt_placeholder="Why is <word> in instrumental case?"
+  error
 ) -%}
   <form
     method="post"
@@ -24,19 +19,6 @@
     hx-on:htmx:afterRequest="const btn=this.querySelector('button'); btn.innerText=btn.dataset.label || 'Regenerate'; btn.removeAttribute('aria-busy');"
   >
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-    {% if extra_prompt_name %}
-      {% set prompt_id = extra_prompt_id or extra_prompt_name %}
-      <div class="action-notes">
-        <label class="form-label" for="{{ prompt_id }}">{{ extra_prompt_label }}</label>
-        <textarea
-          id="{{ prompt_id }}"
-          name="{{ extra_prompt_name }}"
-          class="input"
-          rows="3"
-          placeholder="{{ extra_prompt_placeholder }}"
-        >{{ extra_prompt_value }}</textarea>
-      </div>
-    {% endif %}
     <select id="{{ select_id }}" name="model" class="select">
       {% for model in model_choices %}
         <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>

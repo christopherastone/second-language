@@ -56,11 +56,17 @@ def _validate_feed_entry(entry: dict) -> dict:
     language = str(entry["language"]).strip().lower()
     if not LANGUAGE_RE.match(language):
         raise RuntimeError(f"Invalid language code in feeds.yaml: {entry['language']}")
+    context = entry.get("context")
+    if context is not None:
+        context = str(context).strip()
+        if not context:
+            context = None
     return {
         "id": str(entry["id"]).strip(),
         "url": str(entry["url"]).strip(),
         "language": language,
         "enabled": bool(entry.get("enabled", True)),
+        "context": context,
     }
 
 

@@ -204,13 +204,19 @@ The canonical dictionary form of a token.
      - Displayed in a simple card list with a section heading.
      - Omitted if the sentence contains only straightforward grammar.
 
-  6. **Action controls** (grouped together):
+  6. **Chat**:
+     - Always-visible chat thread tied to the sentence.
+     - Messages are stored per sentence in `sentences.chat_json`.
+     - Only user/assistant turns are displayed (no system prompts).
+     - Sending a message appends it and requests a single assistant response.
+
+  7. **Action controls** (grouped together):
      - **Favorite toggle**: Clickable star icon that fills when favorited. HTMX in-place update (no history push).
      - **Regenerate controls**:
        - A dropdown to select an LLM model (shows all three: nano/mini/gpt-5). Session remembers last selected model.
        - A button labeled "Regenerate" (disabled with text "Regenerating..." during LLM call).
        - A label showing which model generated the current content.
-       - Clicking "Regenerate" re-generates all content for the page, replaces the cached data, updates the page in place (HTMX), and refreshes `sentence_lemmas` for this sentence. No history is kept. No cooldown.
+       - Clicking "Regenerate" re-generates all content for the page, replaces the cached data, clears the sentence chat, updates the page in place (HTMX), and refreshes `sentence_lemmas` for this sentence. No history is kept. No cooldown.
      - **Delete button**: Immediately deletes the sentence (no confirmation dialog), keeps article in `rss_articles` (won't re-import), redirects to sentence list.
 
 - **LLM failure**: If generation fails after retries, show error message with "Try again" button and model selector. Sentence text remains visible.
@@ -245,9 +251,15 @@ The canonical dictionary form of a token.
      - This list is powered by the incremental `sentence_lemmas` index table and updates when sentences are imported, regenerated, or deleted.
      - Displayed in a card list; omit the section if no sentences contain the lemma.
 
-  4. **Action controls** (grouped together):
+  4. **Chat**:
+     - Always-visible chat thread tied to the lemma.
+     - Messages are stored per lemma in `lemmas.chat_json`.
+     - Only user/assistant turns are displayed (no system prompts).
+     - Sending a message appends it and requests a single assistant response.
+
+  5. **Action controls** (grouped together):
      - **Favorite toggle**: Clickable star icon that fills when favorited. HTMX in-place update (no history push).
-     - **Regenerate controls**: Same as sentence detail page.
+     - **Regenerate controls**: Same as sentence detail page (including clearing lemma chat).
 
 - **Access counting**: Each successful full page load that renders content (HTTP 200) increments the lemma's access count by 1. HTMX partial updates, regenerations, and redirects do not increment counts.
 
@@ -316,9 +328,9 @@ The canonical dictionary form of a token.
 | Table           | Key columns                                                                 |
 |-----------------|-----------------------------------------------------------------------------|
 | `settings`      | `password_hash`, `default_language`                                         |
-| `sentences`     | `id`, `language`, `hash`, `text`, `gloss_json`, `proper_nouns_json`, `grammar_notes_json`, `natural_translation`, `audio_data`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
+| `sentences`     | `id`, `language`, `hash`, `text`, `article_link`, `source_context`, `gloss_json`, `proper_nouns_json`, `grammar_notes_json`, `chat_json`, `natural_translation`, `audio_data`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `sentence_lemmas` | `language`, `normalized_lemma`, `sentence_id`                             |
-| `lemmas`        | `id`, `language`, `normalized_lemma`, `translation`, `related_words_json`, `audio_data`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
+| `lemmas`        | `id`, `language`, `normalized_lemma`, `translation`, `related_words_json`, `chat_json`, `audio_data`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `rss_articles`  | `article_id`                                               |
 | `favorites`     | `id`, `item_type`, `item_id`, `created_at`                                  |
 
@@ -346,9 +358,11 @@ CREATE TABLE IF NOT EXISTS sentences (
   hash TEXT NOT NULL,
   text TEXT NOT NULL,
   article_link TEXT,
+  source_context TEXT,
   gloss_json TEXT,
   proper_nouns_json TEXT,
   grammar_notes_json TEXT,
+  chat_json TEXT NOT NULL DEFAULT '[]',
   natural_translation TEXT,
   audio_data BLOB,
   model_used TEXT,
@@ -381,6 +395,7 @@ CREATE TABLE IF NOT EXISTS lemmas (
   normalized_lemma TEXT NOT NULL,
   translation TEXT,
   related_words_json TEXT,
+  chat_json TEXT NOT NULL DEFAULT '[]',
   audio_data BLOB,
   model_used TEXT,
   schema_version INTEGER NOT NULL,
@@ -443,7 +458,8 @@ Foreign keys are not required for token-to-lemma relationships because tokenizat
 
 - Feeds are defined in a configuration file `feeds.yaml`.
 - **Startup validation**: Exit with clear error if `feeds.yaml` is missing or contains malformed YAML.
-- Each feed specifies: URL, language code, enabled/disabled flag.
+- Each feed specifies: URL, language code, enabled/disabled flag, and optional `context` string.
+- If `context` is present, include it in sentence-generation prompts for RSS-imported sentences.
 - Feed management is via manual YAML editing only (no CLI commands for feeds).
 - **Language validity**: A language is valid if ANY feed entry exists for that language code, regardless of whether feeds are enabled or disabled.
 - Articles are deduplicated globally by the RSS item's `id`/GUID field as returned by the RSS parser.

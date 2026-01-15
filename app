@@ -48,19 +48,14 @@ from config import (
     load_version,
     require_env,
 )
-from db import (
-    close_db,
-    ensure_lemma_audio_column,
-    get_db,
-    json_dumps,
-    refresh_sentence_lemmas,
-    utc_now,
-)
+from db import close_db, get_db, json_dumps, refresh_sentence_lemmas, utc_now
 from llm import (
     LLMOutputError,
     LLMRequestError,
     generate_audio,
+    generate_lemma_chat_reply,
     generate_lemma_content,
+    generate_sentence_chat_reply,
     generate_sentence_content,
     validate_openai_key,
 )
@@ -127,6 +122,14 @@ def ensure_model(model: str | None) -> str:
     return model
 
 
+def ensure_chat_model(model: str | None) -> str:
+    if not model:
+        return session.get("chat_model_choice", DEFAULT_MODEL)
+    if model not in MODEL_CHOICES:
+        return DEFAULT_MODEL
+    return model
+
+
 def json_loads(value: str | None):
     if not value:
         return None
@@ -134,6 +137,33 @@ def json_loads(value: str | None):
         return json.loads(value)
     except json.JSONDecodeError:
         return None
+
+
+def load_chat_messages(value: str | None) -> list[dict]:
+    if not value:
+        return []
+    try:
+        data = json.loads(value)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(data, list):
+        return []
+    messages = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        role = item.get("role")
+        content = item.get("content")
+        if role in {"user", "assistant"} and isinstance(content, str):
+            messages.append(
+                {
+                    "role": role,
+                    "content": content,
+                    "created_at": item.get("created_at"),
+                    "model_used": item.get("model_used"),
+                }
+            )
+    return messages
 
 
 def get_sentence_content(row: dict) -> dict | None:
@@ -198,13 +228,10 @@ def generate_sentence_content_cached(
     sentence_id: int,
     sentence_text: str,
     model: str,
-    extra_instructions: str | None = None,
+    source_context: str | None = None,
 ) -> tuple[dict | None, str | None]:
     payload, error = ensure_sentence_payload(
-        language,
-        sentence_text,
-        model,
-        extra_instructions=extra_instructions,
+        language, sentence_text, model, source_context=source_context
     )
     if payload:
         payload["language"] = language
@@ -232,7 +259,6 @@ def resolve_sentence_content(
     row,
     model: str,
     force_generate: bool,
-    extra_instructions: str | None = None,
 ) -> tuple[dict | None, str | None]:
     row_dict = dict(row)
     content = get_sentence_content(row_dict)
@@ -257,7 +283,7 @@ def resolve_sentence_content(
             row["id"],
             row["text"],
             model,
-            extra_instructions=extra_instructions,
+            source_context=row["source_context"],
         )
         if generated_content is None:
             if force_generate:
@@ -468,18 +494,33 @@ def update_lemma_cache(lemma_id: int, payload: dict) -> None:
     db.commit()
 
 
+def clear_sentence_chat(sentence_id: int) -> None:
+    db = get_db()
+    db.execute(
+        "UPDATE sentences SET chat_json = ?, updated_at = ? WHERE id = ?",
+        (json_dumps([]), utc_now(), sentence_id),
+    )
+    db.commit()
+
+
+def clear_lemma_chat(lemma_id: int) -> None:
+    db = get_db()
+    db.execute(
+        "UPDATE lemmas SET chat_json = ?, updated_at = ? WHERE id = ?",
+        (json_dumps([]), utc_now(), lemma_id),
+    )
+    db.commit()
+
+
 def ensure_sentence_payload(
     language: str,
     sentence_text: str,
     model: str,
-    extra_instructions: str | None = None,
+    source_context: str | None = None,
 ) -> tuple[dict | None, str | None]:
     try:
         payload = generate_sentence_content(
-            language,
-            sentence_text,
-            model,
-            extra_instructions=extra_instructions,
+            language, sentence_text, model, source_context=source_context
         )
         payload["language"] = language
         return payload, None
@@ -579,6 +620,9 @@ def require_login():
     if session.get("model_choice_source") != "user":
         session["model_choice"] = DEFAULT_MODEL
         session["model_choice_source"] = "default"
+    if session.get("chat_model_choice_source") != "user":
+        session["chat_model_choice"] = DEFAULT_MODEL
+        session["chat_model_choice_source"] = "default"
     session.permanent = True
     return None
 
@@ -594,6 +638,7 @@ def inject_globals():
         "show_glosses": session.get("show_glosses", True),
         "model_choices": MODEL_CHOICES,
         "selected_model": session.get("model_choice", DEFAULT_MODEL),
+        "selected_chat_model": session.get("chat_model_choice", DEFAULT_MODEL),
     }
 
 
@@ -680,6 +725,8 @@ def sentence_detail(lang: str, hash_slug: str):
     if not request.headers.get("HX-Request") and content is not None:
         increment_access("sentences", row["id"])
 
+    chat_messages = load_chat_messages(row["chat_json"])
+
     return render_template(
         "sentence_detail.html",
         language=language,
@@ -687,7 +734,7 @@ def sentence_detail(lang: str, hash_slug: str):
         content=content,
         error=error,
         is_favorite=bool(is_favorite),
-        extra_notes="",
+        chat_messages=chat_messages,
     )
 
 
@@ -695,8 +742,6 @@ def sentence_detail(lang: str, hash_slug: str):
 def sentence_regenerate(lang: str, hash_slug: str):
     language = require_language(lang)
     model = ensure_model(request.form.get("model"))
-    extra_notes = request.form.get("extra_notes", "").strip()
-    extra_instructions = extra_notes or None
     session["model_choice"] = model
     session["model_choice_source"] = "user"
     db = get_db()
@@ -711,8 +756,12 @@ def sentence_regenerate(lang: str, hash_slug: str):
         row,
         model,
         force_generate=True,
-        extra_instructions=extra_instructions,
     )
+    if content is not None:
+        clear_sentence_chat(row["id"])
+        chat_messages: list[dict] = []
+    else:
+        chat_messages = load_chat_messages(row["chat_json"])
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'sentence' AND item_id = ?",
         (row["id"],),
@@ -724,7 +773,80 @@ def sentence_regenerate(lang: str, hash_slug: str):
         content=content,
         error=error,
         is_favorite=bool(is_favorite),
-        extra_notes=extra_notes,
+        chat_messages=chat_messages,
+    )
+
+
+@app.post("/<lang>/sentence/<hash_slug>/chat")
+def sentence_chat(lang: str, hash_slug: str):
+    language = require_language(lang)
+    message = request.form.get("message", "").strip()
+    model = ensure_chat_model(request.form.get("model"))
+    content_model = ensure_model(None)
+    session["chat_model_choice"] = model
+    session["chat_model_choice_source"] = "user"
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM sentences WHERE language = ? AND hash = ?",
+        (language, hash_slug),
+    ).fetchone()
+    if row is None:
+        abort(404)
+    chat_messages = load_chat_messages(row["chat_json"])
+    chat_error = None
+    if message:
+        now = utc_now()
+        chat_messages.append({"role": "user", "content": message, "created_at": now})
+        db.execute(
+            "UPDATE sentences SET chat_json = ?, updated_at = ? WHERE id = ?",
+            (json_dumps(chat_messages), now, row["id"]),
+        )
+        db.commit()
+        content, error = resolve_sentence_content(
+            language,
+            row,
+            content_model,
+            force_generate=False,
+        )
+        if content is None:
+            chat_error = error or "Unable to load sentence context."
+        else:
+            try:
+                reply = generate_sentence_chat_reply(
+                    language,
+                    row["text"],
+                    content,
+                    chat_messages,
+                    model=model,
+                )
+                if reply:
+                    chat_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": reply,
+                            "created_at": utc_now(),
+                            "model_used": model,
+                        }
+                    )
+                    db.execute(
+                        "UPDATE sentences SET chat_json = ?, updated_at = ? WHERE id = ?",
+                        (json_dumps(chat_messages), utc_now(), row["id"]),
+                    )
+                    db.commit()
+                else:
+                    chat_error = "No response returned. Please try again."
+            except (LLMRequestError, LLMOutputError):
+                chat_error = "LLM generation failed. Please try again."
+
+    return render_template(
+        "partials/chat_section.html",
+        chat_id="sentence-chat",
+        chat_title="Chat",
+        chat_action=url_for("sentence_chat", lang=language, hash_slug=hash_slug),
+        chat_placeholder="Ask about this sentence...",
+        chat_item_label="sentence",
+        chat_messages=chat_messages,
+        chat_error=chat_error,
     )
 
 
@@ -795,7 +917,6 @@ def lemma_audio(lang: str, lemma: str):
     lemma_display = unquote(lemma)
     normalized = normalize_text(lemma_display)
     db = get_db()
-    ensure_lemma_audio_column(db)
     row = db.execute(
         "SELECT id, normalized_lemma, audio_data FROM lemmas WHERE language = ? AND normalized_lemma = ?",
         (language, normalized),
@@ -828,13 +949,14 @@ def lemma_detail(lang: str, lemma: str):
         db.execute(
             """
             INSERT INTO lemmas (
-                language, normalized_lemma, translation, related_words_json, model_used,
-                schema_version, access_count, created_at, updated_at
-            ) VALUES (?, ?, NULL, NULL, NULL, ?, 0, ?, ?)
+                language, normalized_lemma, translation, related_words_json, chat_json,
+                model_used, schema_version, access_count, created_at, updated_at
+            ) VALUES (?, ?, NULL, NULL, ?, NULL, ?, 0, ?, ?)
             """,
             (
                 language,
                 normalized,
+                json_dumps([]),
                 LEMMA_SCHEMA_VERSION,
                 created_at,
                 created_at,
@@ -865,6 +987,7 @@ def lemma_detail(lang: str, lemma: str):
         increment_access("lemmas", row["id"])
 
     sentences = fetch_sentences_for_lemma(language, normalized)
+    chat_messages = load_chat_messages(row["chat_json"])
 
     return render_template(
         "lemma_detail.html",
@@ -876,6 +999,7 @@ def lemma_detail(lang: str, lemma: str):
         error=error,
         is_favorite=bool(is_favorite),
         sentences=sentences,
+        chat_messages=chat_messages,
     )
 
 
@@ -903,6 +1027,11 @@ def lemma_regenerate(lang: str, lemma: str):
         model,
         force_generate=True,
     )
+    if content is not None:
+        clear_lemma_chat(row["id"])
+        chat_messages: list[dict] = []
+    else:
+        chat_messages = load_chat_messages(row["chat_json"])
 
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'lemma' AND item_id = ?",
@@ -921,6 +1050,87 @@ def lemma_regenerate(lang: str, lemma: str):
         error=error,
         is_favorite=bool(is_favorite),
         sentences=sentences,
+        chat_messages=chat_messages,
+    )
+
+
+@app.post("/<lang>/lemma/<lemma>/chat")
+def lemma_chat(lang: str, lemma: str):
+    language = require_language(lang)
+    lemma_display = unquote(lemma)
+    normalized = normalize_text(lemma_display)
+    message = request.form.get("message", "").strip()
+    model = ensure_chat_model(request.form.get("model"))
+    content_model = ensure_model(None)
+    session["chat_model_choice"] = model
+    session["chat_model_choice_source"] = "user"
+    db = get_db()
+    row = db.execute(
+        "SELECT * FROM lemmas WHERE language = ? AND normalized_lemma = ?",
+        (language, normalized),
+    ).fetchone()
+    if row is None:
+        abort(404)
+    chat_messages = load_chat_messages(row["chat_json"])
+    chat_error = None
+    if message:
+        now = utc_now()
+        chat_messages.append({"role": "user", "content": message, "created_at": now})
+        db.execute(
+            "UPDATE lemmas SET chat_json = ?, updated_at = ? WHERE id = ?",
+            (json_dumps(chat_messages), now, row["id"]),
+        )
+        db.commit()
+        content, error = resolve_lemma_content(
+            db,
+            language,
+            normalized,
+            row,
+            content_model,
+            force_generate=False,
+        )
+        if content is None:
+            chat_error = error or "Unable to load lemma context."
+        else:
+            sentence_rows = fetch_sentences_for_lemma(language, normalized)
+            sentence_dicts = [dict(item) for item in sentence_rows]
+            try:
+                reply = generate_lemma_chat_reply(
+                    language,
+                    normalized,
+                    content,
+                    sentence_dicts,
+                    chat_messages,
+                    model=model,
+                )
+                if reply:
+                    chat_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": reply,
+                            "created_at": utc_now(),
+                            "model_used": model,
+                        }
+                    )
+                    db.execute(
+                        "UPDATE lemmas SET chat_json = ?, updated_at = ? WHERE id = ?",
+                        (json_dumps(chat_messages), utc_now(), row["id"]),
+                    )
+                    db.commit()
+                else:
+                    chat_error = "No response returned. Please try again."
+            except (LLMRequestError, LLMOutputError):
+                chat_error = "LLM generation failed. Please try again."
+
+    return render_template(
+        "partials/chat_section.html",
+        chat_id="lemma-chat",
+        chat_title="Chat",
+        chat_action=url_for("lemma_chat", lang=language, lemma=quote(normalized)),
+        chat_placeholder="Ask about this lemma...",
+        chat_item_label="lemma",
+        chat_messages=chat_messages,
+        chat_error=chat_error,
     )
 
 

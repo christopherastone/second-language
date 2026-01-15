@@ -42,15 +42,6 @@ def close_db(exception: Exception | None = None) -> None:
         db.close()
 
 
-def ensure_lemma_audio_column(db: sqlite3.Connection) -> None:
-    """Add the lemmas.audio_data column if it does not exist yet."""
-    columns = db.execute("PRAGMA table_info(lemmas)").fetchall()
-    if any(column["name"] == "audio_data" for column in columns):
-        return
-    db.execute("ALTER TABLE lemmas ADD COLUMN audio_data BLOB")
-    db.commit()
-
-
 def refresh_sentence_lemmas(
     db: sqlite3.Connection,
     language: str,
@@ -87,6 +78,7 @@ def insert_sentence_from_payload(
     sentence_hash: str,
     text: str,
     article_link: str | None,
+    source_context: str | None,
     payload: dict,
     created_at: str,
 ) -> int:
@@ -94,18 +86,21 @@ def insert_sentence_from_payload(
     cursor = db.execute(
         """
         INSERT INTO sentences (
-            language, hash, text, article_link, gloss_json, proper_nouns_json, grammar_notes_json,
-            natural_translation, model_used, schema_version, access_count, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+            language, hash, text, article_link, source_context, gloss_json, proper_nouns_json,
+            grammar_notes_json, chat_json, natural_translation, model_used, schema_version,
+            access_count, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
         """,
         (
             language,
             sentence_hash,
             text,
             article_link,
+            source_context,
             json_dumps(payload["tokens"]),
             json_dumps(payload["proper_nouns"]),
             json_dumps(payload["grammar_notes"]),
+            json_dumps([]),
             payload["natural_english_translation"],
             payload["model_used"],
             SENTENCE_SCHEMA_VERSION,

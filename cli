@@ -109,6 +109,7 @@ def add_sentence(args, feeds):
             sentence_hash=sentence_hash,
             text=text,
             article_link=None,
+            source_context=None,
             payload=payload,
             created_at=created_at,
         )

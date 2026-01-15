@@ -1,0 +1,52 @@
+<div id="{{ chat_id }}" class="content-section chat-section">
+  <h2 class="section-title section-title--spaced">{{ chat_title }}</h2>
+  <div class="card chat-card">
+    <div class="chat-list">
+      {% if chat_messages %}
+        {% for message in chat_messages %}
+          {% set role = message.role if message.role in ['user', 'assistant'] else 'assistant' %}
+          <div class="chat-message chat-message--{{ role }}">
+            <p class="chat-message__role">
+              {{ "You" if role == "user" else "Assistant" }}
+            </p>
+            <p class="chat-message__text">{{ message.content }}</p>
+          </div>
+        {% endfor %}
+      {% endif %}
+    </div>
+    {% if chat_error %}
+      <div class="alert alert-danger chat-error">
+        {{ chat_error }}
+      </div>
+    {% endif %}
+    <form
+      method="post"
+      action="{{ chat_action }}"
+      hx-post="{{ chat_action }}"
+      hx-target="#{{ chat_id }}"
+      hx-swap="outerHTML"
+      hx-push-url="false"
+      class="chat-form"
+      hx-disabled-elt="textarea"
+      hx-on:htmx:beforeRequest="this.setAttribute('aria-busy','true');"
+      hx-on:htmx:afterRequest="this.removeAttribute('aria-busy'); this.reset();"
+    >
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+      <div class="chat-controls">
+        <label class="form-label" for="{{ chat_id }}-model">Chat model</label>
+        <select id="{{ chat_id }}-model" name="model" class="select">
+          {% for model in model_choices %}
+            <option value="{{ model }}" {% if model == selected_chat_model %}selected{% endif %}>{{ model }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <textarea
+        name="message"
+        class="input"
+        rows="2"
+        placeholder="{{ chat_placeholder }}"
+        hx-on:keydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault(); this.form.requestSubmit();}"
+      ></textarea>
+    </form>
+  </div>
+</div>

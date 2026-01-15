@@ -51,6 +51,17 @@
     </div>
   {% endif %}
 
+  <p class="action-hint sentence-meta">
+    Generated with {{ content.model_used if content else 'unknown' }}
+  </p>
+
+  {% set chat_id = "lemma-chat" %}
+  {% set chat_title = "Chat" %}
+  {% set chat_action = url_for('lemma_chat', lang=language, lemma=lemma_text) %}
+  {% set chat_placeholder = "Ask about this lemma..." %}
+  {% set chat_item_label = "lemma" %}
+  {% include "partials/chat_section.html" %}
+
   <div class="action-bar action-bar--spaced">
     {% if error %}
       <div class="alert alert-danger action-alert">
@@ -72,9 +83,6 @@
         error
       ) }}
 
-      <span class="action-hint">
-        Generated with {{ content.model_used if content else 'unknown' }}
-      </span>
     </div>
   </div>
 </div>

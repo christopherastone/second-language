@@ -2,8 +2,17 @@
 
 <div id="sentence-content" class="fade-in">
     <div class="card card-section">
+        {% set target_id = "sentence-favorite-" ~ sentence.id %}
+        {% set action = url_for('sentence_favorite', lang=language,
+        hash_slug=sentence.hash) %}
         {% if content %}
-        <div class="token-line">
+        <div class="sentence-header">
+            <p class="sentence-original">{{ sentence.text }}</p>
+            <div class="sentence-favorite">
+                {% include "partials/favorite_star.html" %}
+            </div>
+        </div>
+        <div class="token-line gloss-cards">
             {% for token in content.tokens -%}
             {% set is_punct = not (token.surface | has_alpha) %}
             <span class="token-card">
@@ -42,7 +51,12 @@
             </p>
         </div>
         {% else %}
-        <div class="sentence-fallback">{{ sentence.text }}</div>
+        <div class="sentence-header">
+            <div class="sentence-fallback">{{ sentence.text }}</div>
+            <div class="sentence-favorite">
+                {% include "partials/favorite_star.html" %}
+            </div>
+        </div>
         {% endif %}
     </div>
 
@@ -74,6 +88,17 @@
     </div>
     {% endif %}
 
+    <p class="action-hint sentence-meta">
+        Generated with {{ content.model_used if content else 'unknown' }}
+    </p>
+
+    {% set chat_id = "sentence-chat" %}
+    {% set chat_title = "Chat" %}
+    {% set chat_action = url_for('sentence_chat', lang=language, hash_slug=sentence.hash) %}
+    {% set chat_placeholder = "Ask about this sentence..." %}
+    {% set chat_item_label = "sentence" %}
+    {% include "partials/chat_section.html" %}
+
     <div class="action-bar action-bar--spaced">
         {% if error %}
         <div class="alert alert-danger action-alert">
@@ -82,27 +107,14 @@
         {% endif %}
 
         <div class="action-row">
-            {% set target_id = "sentence-favorite-" ~ sentence.id %}
-            {% set action = url_for('sentence_favorite', lang=language,
-            hash_slug=sentence.hash) %}
-            {% include "partials/favorite_star.html" %}
-
             {{ regenerate_form(
                 url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash),
                 "#sentence-content",
                 "sentence-model",
                 model_choices,
                 selected_model,
-                error,
-                extra_prompt_name="extra_notes",
-                extra_prompt_value=extra_notes,
-                extra_prompt_id="sentence-extra-notes"
+                error
             ) }}
-
-            <span class="action-hint">
-                Generated with {{ content.model_used if content else 'unknown'
-                }}
-            </span>
 
             <form method="post"
                 action="{{ url_for('sentence_delete', lang=language, hash_slug=sentence.hash) }}"

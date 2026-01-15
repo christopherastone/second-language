@@ -2,11 +2,10 @@
   {% for sentence in sentences %}
     <div class="sentence-item">
       <div class="sentence-item__star">
-        {% if sentence.is_favorite %}
-          <span class="star star-filled" aria-label="favorited">&#9733;</span>
-        {% else %}
-          <span class="star star-empty" aria-label="not favorited">&#9734;</span>
-        {% endif %}
+        {% set target_id = "sentence-favorite-list-" ~ sentence.id %}
+        {% set action = url_for('sentence_favorite', lang=language, hash_slug=sentence.hash) %}
+        {% set is_favorite = sentence.is_favorite %}
+        {% include "partials/favorite_star.html" %}
       </div>
       <div class="sentence-item__audio audio-control">
         <button class="audio-button" type="button" aria-label="Play sentence audio" aria-pressed="false">

@@ -99,6 +99,20 @@
         }
       });
 
+      document.addEventListener("click", function (event) {
+        const sentenceItem = event.target.closest(".sentence-item");
+        if (!sentenceItem) {
+          return;
+        }
+        if (event.target.closest("a, button, input, textarea, select, label, form")) {
+          return;
+        }
+        const link = sentenceItem.querySelector(".sentence-item__link");
+        if (link && link.href) {
+          window.location = link.href;
+        }
+      });
+
       document.addEventListener(
         "ended",
         function (event) {

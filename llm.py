@@ -31,11 +31,8 @@ _TOKEN_TAG_ENUM = [
 ]
 
 
-def _string_schema(min_length: bool) -> dict[str, Any]:
-    schema: dict[str, Any] = {"type": "string"}
-    if min_length:
-        schema["minLength"] = 1
-    return schema
+def _string_schema() -> dict[str, Any]:
+    return {"type": "string"}
 
 
 def _object_schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -47,15 +44,15 @@ def _object_schema(properties: dict[str, Any], required: list[str]) -> dict[str,
     }
 
 
-def _sentence_token_schema(min_length: bool, require_details: bool) -> dict[str, Any]:
+def _sentence_token_schema(require_details: bool) -> dict[str, Any]:
     required = ["surface"]
     if require_details:
         required = ["surface", "lemma", "translation", "tags"]
     return _object_schema(
         {
-            "surface": _string_schema(min_length),
-            "lemma": _string_schema(min_length),
-            "translation": _string_schema(min_length),
+            "surface": _string_schema(),
+            "lemma": _string_schema(),
+            "translation": _string_schema(),
             "tags": {
                 "type": "array",
                 "items": {"type": "string", "enum": _TOKEN_TAG_ENUM},
@@ -66,7 +63,6 @@ def _sentence_token_schema(min_length: bool, require_details: bool) -> dict[str,
 
 
 def _sentence_schema(
-    min_length: bool,
     require_details: bool,
     include_meta: bool,
 ) -> dict[str, Any]:
@@ -81,18 +77,18 @@ def _sentence_schema(
             "grammar_notes",
         ],
         "properties": {
-            "sentence_text": _string_schema(min_length),
-            "natural_english_translation": _string_schema(min_length),
+            "sentence_text": _string_schema(),
+            "natural_english_translation": _string_schema(),
             "tokens": {
                 "type": "array",
-                "items": _sentence_token_schema(min_length, require_details),
+                "items": _sentence_token_schema(require_details),
             },
             "proper_nouns": {
                 "type": "array",
                 "items": _object_schema(
                     {
-                        "nominative": _string_schema(min_length),
-                        "definition": _string_schema(min_length),
+                        "nominative": _string_schema(),
+                        "definition": _string_schema(),
                     },
                     ["nominative", "definition"],
                 ),
@@ -101,8 +97,8 @@ def _sentence_schema(
                 "type": "array",
                 "items": _object_schema(
                     {
-                        "title": _string_schema(min_length),
-                        "note": _string_schema(min_length),
+                        "title": _string_schema(),
+                        "note": _string_schema(),
                     },
                     ["title", "note"],
                 ),
@@ -119,7 +115,6 @@ def _sentence_schema(
 
 
 def _lemma_schema(
-    min_length: bool,
     include_meta: bool,
     include_max_items: bool,
 ) -> dict[str, Any]:
@@ -127,10 +122,10 @@ def _lemma_schema(
         "type": "array",
         "items": _object_schema(
             {
-                "word": _string_schema(min_length),
-                "normalized_lemma": _string_schema(min_length),
-                "translation": _string_schema(min_length),
-                "note": _string_schema(min_length),
+                "word": _string_schema(),
+                "normalized_lemma": _string_schema(),
+                "translation": _string_schema(),
+                "note": _string_schema(),
             },
             ["word", "normalized_lemma", "translation", "note"],
         ),
@@ -142,9 +137,9 @@ def _lemma_schema(
         "additionalProperties": False,
         "required": ["lemma", "normalized_lemma", "translation", "related_words"],
         "properties": {
-            "lemma": _string_schema(min_length),
-            "normalized_lemma": _string_schema(min_length),
-            "translation": _string_schema(min_length),
+            "lemma": _string_schema(),
+            "normalized_lemma": _string_schema(),
+            "translation": _string_schema(),
             "related_words": related_words,
         },
     }
@@ -158,22 +153,18 @@ def _lemma_schema(
 
 
 SENTENCE_SCHEMA = _sentence_schema(
-    min_length=True,
     require_details=False,
     include_meta=True,
 )
 SENTENCE_SCHEMA_OUTPUT = _sentence_schema(
-    min_length=False,
     require_details=True,
     include_meta=False,
 )
 LEMMA_SCHEMA = _lemma_schema(
-    min_length=True,
     include_meta=True,
     include_max_items=True,
 )
 LEMMA_SCHEMA_OUTPUT = _lemma_schema(
-    min_length=False,
     include_meta=False,
     include_max_items=False,
 )
@@ -313,6 +304,22 @@ def request_raw_text(system_prompt: str, user_prompt: str, model: str) -> str:
         {"type": "json_object"},
         schema_format=False,
     )
+
+
+def request_text(system_prompt: str, user_prompt: str, model: str) -> str:
+    if model not in MODEL_CHOICES:
+        raise LLMRequestError(f"Unsupported model: {model}")
+    try:
+        return _request_raw_text(
+            system_prompt,
+            user_prompt,
+            model,
+            None,
+            schema_format=False,
+        ).strip()
+    except OpenAIError as exc:
+        _log_openai_error(model, exc)
+        raise LLMRequestError("LLM request failed") from exc
 
 
 def request_raw_schema_text(
@@ -542,6 +549,20 @@ LEMMA_SYSTEM_PROMPT = (
     "Exclude identical lemma variants or mere inflections."
 )
 
+SENTENCE_CHAT_SYSTEM_PROMPT = (
+    "You are a concise, helpful language tutor. "
+    "Answer the user's latest message about the sentence using the provided context. "
+    "Respond in English. Do not output JSON or restate the full context. "
+    "If the question is unrelated or the answer is uncertain, say so briefly."
+)
+
+LEMMA_CHAT_SYSTEM_PROMPT = (
+    "You are a concise, helpful language tutor. "
+    "Answer the user's latest message about the lemma using the provided context. "
+    "Respond in English. Do not output JSON or restate the full context. "
+    "If the question is unrelated or the answer is uncertain, say so briefly."
+)
+
 
 def _generate_payload(
     *,
@@ -608,7 +629,7 @@ def generate_sentence_content(
     language: str,
     sentence_text: str,
     model: str | None = None,
-    extra_instructions: str | None = None,
+    source_context: str | None = None,
 ) -> dict[str, Any]:
     model = model or DEFAULT_MODEL
 
@@ -618,13 +639,8 @@ def generate_sentence_content(
         f"Sentence (normalized, must match exactly): {sentence_text}\n\n"
         "Output JSON with keys: sentence_text, natural_english_translation, tokens, proper_nouns, grammar_notes."
     )
-    extra_instructions = (extra_instructions or "").strip()
-    if extra_instructions:
-        user_prompt += (
-            "\n\nAdditional user questions or comments "
-            "(address in grammar_notes where relevant, in addition to other issues of interest):\n"
-            f"{extra_instructions}"
-        )
+    if source_context:
+        user_prompt += f"\n\nSource context: {source_context}"
 
     def validator(payload: dict[str, Any]) -> None:
         _validate_sentence_payload(payload, sentence_text)
@@ -670,6 +686,143 @@ def generate_lemma_content(
         validator=validator,
         success_log="Successfully validated LLM lemma payload",
     )
+
+
+def _format_chat_history(messages: list[dict]) -> str:
+    lines = []
+    for item in messages:
+        role = item.get("role")
+        content = item.get("content")
+        if role not in {"user", "assistant"} or not isinstance(content, str):
+            continue
+        content = content.strip()
+        if not content:
+            continue
+        label = "User" if role == "user" else "Assistant"
+        lines.append(f"{label}: {content}")
+    return "\n".join(lines)
+
+
+def _format_tokens(tokens: list[dict]) -> str:
+    lines = []
+    for token in tokens:
+        surface = token.get("surface")
+        if not isinstance(surface, str) or not surface.strip():
+            continue
+        translation = token.get("translation")
+        lemma = token.get("lemma")
+        tags = token.get("tags") or []
+        parts = []
+        if isinstance(translation, str) and translation.strip():
+            parts.append(translation.strip())
+        if isinstance(tags, list) and tags:
+            tags_value = ".".join(tag for tag in tags if isinstance(tag, str))
+            if tags_value:
+                parts.append(tags_value)
+        detail = "; ".join(parts)
+        if isinstance(lemma, str) and lemma.strip():
+            if detail:
+                detail = f"{detail}; lemma={lemma.strip()}"
+            else:
+                detail = f"lemma={lemma.strip()}"
+        if detail:
+            lines.append(f"- {surface.strip()}: {detail}")
+        else:
+            lines.append(f"- {surface.strip()}")
+    return "\n".join(lines)
+
+
+def _format_named_list(items: list[dict], label_key: str, value_key: str) -> str:
+    lines = []
+    for item in items:
+        label = item.get(label_key)
+        value = item.get(value_key)
+        if not isinstance(label, str) or not label.strip():
+            continue
+        if isinstance(value, str) and value.strip():
+            lines.append(f"- {label.strip()}: {value.strip()}")
+        else:
+            lines.append(f"- {label.strip()}")
+    return "\n".join(lines)
+
+
+def generate_sentence_chat_reply(
+    language: str,
+    sentence_text: str,
+    content: dict[str, Any],
+    chat_messages: list[dict],
+    model: str | None = None,
+) -> str:
+    model = model or DEFAULT_MODEL
+    tokens_block = _format_tokens(content.get("tokens", []))
+    proper_block = _format_named_list(content.get("proper_nouns", []), "nominative", "definition")
+    grammar_block = _format_named_list(content.get("grammar_notes", []), "title", "note")
+    chat_block = _format_chat_history(chat_messages)
+
+    user_prompt = (
+        "Use the context to answer the user's latest message.\n"
+        f"Language: {language}\n"
+        f"Sentence: {sentence_text}\n"
+        f"Translation: {content.get('natural_english_translation', '')}\n\n"
+        "Tokens:\n"
+        f"{tokens_block or '- (none)'}\n\n"
+        "Proper nouns:\n"
+        f"{proper_block or '- (none)'}\n\n"
+        "Grammar notes:\n"
+        f"{grammar_block or '- (none)'}\n\n"
+        "Conversation:\n"
+        f"{chat_block}"
+    )
+    return request_text(SENTENCE_CHAT_SYSTEM_PROMPT, user_prompt, model)
+
+
+def generate_lemma_chat_reply(
+    language: str,
+    lemma: str,
+    content: dict[str, Any],
+    sentences: list[dict],
+    chat_messages: list[dict],
+    model: str | None = None,
+) -> str:
+    model = model or DEFAULT_MODEL
+    related_block = []
+    for item in content.get("related_words", []):
+        word = item.get("word")
+        translation = item.get("translation")
+        note = item.get("note")
+        if not isinstance(word, str) or not word.strip():
+            continue
+        detail_parts = []
+        if isinstance(translation, str) and translation.strip():
+            detail_parts.append(translation.strip())
+        if isinstance(note, str) and note.strip():
+            detail_parts.append(note.strip())
+        detail = " - ".join(detail_parts)
+        if detail:
+            related_block.append(f"- {word.strip()}: {detail}")
+        else:
+            related_block.append(f"- {word.strip()}")
+    related_text = "\n".join(related_block)
+    sentences_block = "\n".join(
+        f"- {item.get('text')}"
+        for item in sentences
+        if isinstance(item, dict) and isinstance(item.get("text"), str)
+    )
+    chat_block = _format_chat_history(chat_messages)
+
+    user_prompt = (
+        "Use the context to answer the user's latest message.\n"
+        f"Language: {language}\n"
+        f"Lemma: {lemma}\n"
+        f"Translation: {content.get('translation', '')}\n\n"
+        "Related words:\n"
+        f"{related_text or '- (none)'}\n\n"
+        "Example sentences:\n"
+        f"{sentences_block or '- (none)'}\n\n"
+        "Conversation:\n"
+        f"{chat_block}"
+    )
+    return request_text(LEMMA_CHAT_SYSTEM_PROMPT, user_prompt, model)
 
 
 def generate_audio(text: str, language: str = "sl") -> bytes:
