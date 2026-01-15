@@ -165,8 +165,8 @@ The canonical dictionary form of a token.
 - **Layout** (top to bottom):
 
   1. **Glossed sentence** (bold):
-     - Each token displayed as an inline-block with its gloss directly below (interlinear style).
-     - Token blocks are separated by horizontal spacing only (no borders or backgrounds).
+     - Each token displayed as an inline-block card with its gloss directly below (interlinear style).
+     - Token cards use a light background, border, and rounded corners; cards are separated by horizontal spacing.
      - Sentence wraps naturally to multiple lines if long.
      - Gloss text is the same size as the token but uses muted color/lighter weight.
      - Gloss visibility follows the session "Show glosses" setting; when disabled, gloss text is hidden via CSS but tokens remain visible and clickable.
@@ -176,26 +176,32 @@ The canonical dictionary form of a token.
      - Word tokens link to their lemma page; show underline on hover (standard link behavior).
      - Punctuation tokens have the same inline-block layout but with empty gloss row.
 
-  2. **Proper noun definitions** (optional):
+  2. **Sentence audio**:
+     - An audio player appears below the glossed sentence, generated for the sentence text.
+
+  3. **Natural English translation**:
+     - The fluent translation appears below the audio player.
+
+  4. **Proper noun definitions** (optional):
      - A list of proper nouns in the sentence unfamiliar to most Americans.
          - Exclude globally famous proper nouns like `Paris` or `Mozart`
          - Include all local figures, places, or organizations
          - Include famous places if their English name is different, e.g., `Vienna` is famous, but its Slovenian name `Dunaj` should be explained.
          - Detect proper nouns in any grammatical case form; show nominative form in the definition.
      - Each entry: proper noun (nominative case) + brief definition/explanation.
-     - Plain text display with simple heading (no boxes or backgrounds).
+     - Displayed in a simple card list with a section heading.
      - Per-sentence and cached with the sentence; not shared across sentences.
      - Omitted if the sentence contains no unfamiliar proper nouns.
 
-  3. **Grammar notes** (optional):
+  5. **Grammar notes** (optional):
      - Surprising grammar features for an English speaker.
      - Excludes basics that apply to most languages (e.g., adjective gender agreement, verb number agreement).
      - Focuses on tense/mood/aspect differences, unusual word order, constructions without direct English equivalents.
      - Direct explanations without English comparisons (not "Unlike English...").
-     - Plain text display with simple heading (no boxes or backgrounds).
+     - Displayed in a simple card list with a section heading.
      - Omitted if the sentence contains only straightforward grammar.
 
-  4. **Action controls** (grouped together):
+  6. **Action controls** (grouped together):
      - **Favorite toggle**: Clickable star icon that fills when favorited. HTMX in-place update (no history push).
      - **Regenerate controls**:
        - A dropdown to select an LLM model (shows all three: nano/mini/gpt-5). Session remembers last selected model.
@@ -213,8 +219,8 @@ The canonical dictionary form of a token.
 - **URL**: `/<lang>/lemma/<normalized_lemma>` (URL-encoded)
 - **Lookup**: The server URL-decodes and normalizes the lemma segment before looking up `lemmas.normalized_lemma`.
 - **Lemma creation**: Lemma records are created only when the page is first accessed (not eagerly when referenced).
-- **Content generation**: If the lemma has no cached content, generate inline with loading state, then display.
-- **Single-flight**: Only one LLM call may run at a time per `(language, normalized_lemma)`. Concurrent requests should wait or display a loading state and must not trigger additional LLM calls.
+- **Content generation**: If the lemma has no cached content, the request waits for generation and then renders the page.
+- **Single-flight**: Only one LLM call may run at a time per `(language, normalized_lemma)`. Concurrent requests wait for the in-flight generation and do not trigger additional LLM calls.
 - **Layout** (top to bottom):
 
   1. **Lemma and translation**:
@@ -225,7 +231,7 @@ The canonical dictionary form of a token.
      - A list of any linguistically relevant related words/phrases with translations (not restricted to words in the database).
      - Each entry includes a short note explaining why it is related (e.g., etymological relation, false friend, near-synonym distinction).
      - Entries may not always be lemmas in the dictionary sense; each entry includes a `normalized_lemma` link target and links to that lemma page.
-     - Related word links use subtle styling (match surrounding text, subtle underline on hover).
+     - Displayed in a card list; related word links use subtle styling (match surrounding text, subtle underline on hover).
      - Clicking a related word navigates to its lemma page (full navigation, pushes history).
      - Excludes inflected/conjugated forms of the same lemma.
      - May be shorter or omitted if no good candidates.
@@ -233,7 +239,7 @@ The canonical dictionary form of a token.
   3. **Sentences containing this lemma** (optional):
      - Show up to 20 sentences in the same language that contain this lemma (configurable constant), ordered by `sentences.created_at` descending.
      - This list is powered by the incremental `sentence_lemmas` index table and updates when sentences are imported, regenerated, or deleted.
-     - Omit the section if no sentences contain the lemma.
+     - Displayed in a card list; omit the section if no sentences contain the lemma.
 
   4. **Action controls** (grouped together):
      - **Favorite toggle**: Clickable star icon that fills when favorited. HTMX in-place update (no history push).
@@ -275,9 +281,9 @@ The canonical dictionary form of a token.
 
 ### Loading States
 
-- Use native browser loading indicators only.
-- No custom spinners or progress bars during navigation.
-- Regenerate button shows "Regenerating..." text while disabled during LLM calls.
+- Sentence list Update button swaps to an inline SVG spinner with "Updating..." text during the request.
+- Regenerate buttons swap to "Regenerating..." text and set `aria-busy` while disabled during LLM calls.
+- No full-page spinners; navigation relies on the browser's native loading indicator.
 
 ### Navigation Header
 
