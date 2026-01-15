@@ -470,6 +470,11 @@ body {
   margin-top: 0.125rem;
 }
 
+.sentence-item__audio {
+  flex-shrink: 0;
+  margin-top: 0.1rem;
+}
+
 .sentence-item__content {
   flex: 1;
   min-width: 0;
@@ -674,6 +679,53 @@ body {
   width: 100%;
   margin-top: 1.5rem;
   border-radius: 8px;
+}
+
+.lemma-audio {
+  display: block;
+  width: 100%;
+  max-width: 280px;
+  margin-top: 0.75rem;
+  border-radius: 8px;
+}
+
+.audio-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+.audio-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-subtle);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.audio-button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.audio-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.audio-button[data-playing="true"] {
+  background: var(--accent-light);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.audio-inline {
+  display: none;
 }
 
 .sentence-translation {

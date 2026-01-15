@@ -1,5 +1,22 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "flask>=3.0.0",
+#   "flask-wtf>=1.2.1",
+#   "requests>=2.32.0",
+#   "feedparser>=6.0.11",
+#   "openai>=1.40.0",
+#   "pyyaml>=6.0.1",
+#   "jsonschema>=4.22.0",
+#   "google-cloud-texttospeech>=2.14.0",
+#   "python-dotenv>=1.0.1",
+# ]
+# ///
+
 import json
 import logging
+import os
 import threading
 import time
 from datetime import timedelta
@@ -31,8 +48,22 @@ from config import (
     load_version,
     require_env,
 )
-from db import close_db, get_db, json_dumps, refresh_sentence_lemmas, utc_now
-from llm import LLMOutputError, LLMRequestError, generate_audio, generate_lemma_content, generate_sentence_content, validate_openai_key
+from db import (
+    close_db,
+    ensure_lemma_audio_column,
+    get_db,
+    json_dumps,
+    refresh_sentence_lemmas,
+    utc_now,
+)
+from llm import (
+    LLMOutputError,
+    LLMRequestError,
+    generate_audio,
+    generate_lemma_content,
+    generate_sentence_content,
+    validate_openai_key,
+)
 from normalization import normalize_text, token_has_alpha
 from rss import update_from_feeds
 
@@ -40,7 +71,9 @@ APP_NAME = "Second Language"
 logger = logging.getLogger("second_language")
 
 if not logger.handlers:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = require_env("SECRET_KEY")
@@ -67,7 +100,9 @@ def get_settings() -> dict:
     if "settings" not in g:
         row = get_db().execute("SELECT * FROM settings WHERE id = 1").fetchone()
         if row is None:
-            raise RuntimeError("Settings not configured. Run cli set-password and cli set-language.")
+            raise RuntimeError(
+                "Settings not configured. Run cli set-password and cli set-language."
+            )
         g.settings = dict(row)
     return g.settings
 
@@ -452,7 +487,9 @@ def ensure_sentence_payload(
         return None, "LLM generation failed. Please try again."
 
 
-def ensure_lemma_payload(language: str, lemma: str, normalized_lemma: str, model: str) -> tuple[dict | None, str | None]:
+def ensure_lemma_payload(
+    language: str, lemma: str, normalized_lemma: str, model: str
+) -> tuple[dict | None, str | None]:
     try:
         payload = generate_lemma_content(language, lemma, normalized_lemma, model)
         return payload, None
@@ -569,8 +606,6 @@ def lemma_url_filter(lemma: str, language: str) -> str:
 @app.template_filter("has_alpha")
 def has_alpha_filter(text: str) -> bool:
     return token_has_alpha(text)
-
-
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -748,6 +783,30 @@ def sentence_audio(lang: str, hash_slug: str):
         audio_data = generate_audio(row["text"], language)
         db.execute(
             "UPDATE sentences SET audio_data = ? WHERE id = ?",
+            (audio_data, row["id"]),
+        )
+        db.commit()
+    return Response(audio_data, mimetype="audio/mpeg")
+
+
+@app.get("/<lang>/lemma/<lemma>/audio")
+def lemma_audio(lang: str, lemma: str):
+    language = require_language(lang)
+    lemma_display = unquote(lemma)
+    normalized = normalize_text(lemma_display)
+    db = get_db()
+    ensure_lemma_audio_column(db)
+    row = db.execute(
+        "SELECT id, normalized_lemma, audio_data FROM lemmas WHERE language = ? AND normalized_lemma = ?",
+        (language, normalized),
+    ).fetchone()
+    if row is None:
+        abort(404)
+    audio_data = row["audio_data"]
+    if audio_data is None:
+        audio_data = generate_audio(row["normalized_lemma"], language)
+        db.execute(
+            "UPDATE lemmas SET audio_data = ? WHERE id = ?",
             (audio_data, row["id"]),
         )
         db.commit()
@@ -933,3 +992,16 @@ def favicon():
         "<rect width='100' height='100' fill='%230a0a0a'/><text x='50' y='65' "
         "font-size='48' text-anchor='middle' fill='%23ffffff'>SL</text></svg>"
     )
+
+
+def main() -> None:
+    app.run(
+        host=os.environ.get("HOST", "0.0.0.0"),
+        port=int(os.environ.get("PORT", "6543")),
+        debug=False,
+        use_reloader=False,
+    )
+
+
+if __name__ == "__main__":
+    main()

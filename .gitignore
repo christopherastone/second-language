@@ -282,3 +282,7 @@ pyrightconfig.json
 
 # Database
 data/*
+
+# Environment variables file
+.env
+second-language-service-account.json

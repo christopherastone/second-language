@@ -1,4 +1,19 @@
-#!/usr/bin/env python
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#   "flask>=3.0.0",
+#   "flask-wtf>=1.2.1",
+#   "requests>=2.32.0",
+#   "feedparser>=6.0.11",
+#   "openai>=1.40.0",
+#   "pyyaml>=6.0.1",
+#   "jsonschema>=4.22.0",
+#   "google-cloud-texttospeech>=2.14.0",
+#   "python-dotenv>=1.0.1",
+# ]
+# ///
+
 import argparse
 import secrets
 

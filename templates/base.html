@@ -62,6 +62,62 @@
           document.body.classList.toggle("hide-glosses", !show);
         }
       });
+
+      document.addEventListener("click", function (event) {
+        const button = event.target.closest(".audio-button");
+        if (!button) {
+          return;
+        }
+        const control = button.closest(".audio-control");
+        if (!control) {
+          return;
+        }
+        const audio = control.querySelector("audio");
+        if (!audio) {
+          return;
+        }
+        if (audio.paused) {
+          document.querySelectorAll(".audio-control audio").forEach((other) => {
+            if (other === audio) {
+              return;
+            }
+            other.pause();
+            other.currentTime = 0;
+            const otherButton = other.closest(".audio-control")?.querySelector(".audio-button");
+            if (otherButton) {
+              otherButton.setAttribute("aria-pressed", "false");
+              otherButton.dataset.playing = "false";
+            }
+          });
+          audio.play();
+          button.setAttribute("aria-pressed", "true");
+          button.dataset.playing = "true";
+        } else {
+          audio.pause();
+          button.setAttribute("aria-pressed", "false");
+          button.dataset.playing = "false";
+        }
+      });
+
+      document.addEventListener(
+        "ended",
+        function (event) {
+          const audio = event.target;
+          if (!audio || audio.tagName !== "AUDIO") {
+            return;
+          }
+          const control = audio.closest(".audio-control");
+          if (!control) {
+            return;
+          }
+          const button = control.querySelector(".audio-button");
+          if (button) {
+            button.setAttribute("aria-pressed", "false");
+            button.dataset.playing = "false";
+          }
+        },
+        true
+      );
     </script>
   </body>
 </html>

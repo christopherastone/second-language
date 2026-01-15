@@ -32,6 +32,7 @@ A local web application for learning a foreign language (initially Slovenian) ai
 | Forms / CSRF     | Flask-WTF (CSRFProtect)             |
 | RSS fetching     | `requests` + `feedparser`           |
 | Content generation | LLM (OpenAI; default model `gpt-4o`) |
+| TTS audio        | Google Cloud Text-to-Speech         |
 | CSS build        | None (plain CSS in `static/output.css`) |
 
 ---
@@ -153,6 +154,7 @@ The canonical dictionary form of a token.
 - Each row shows:
   - The full sentence text (no truncation).
   - A filled star icon if the sentence is favorited.
+  - An inline audio icon to play the sentence audio without leaving the list.
   - Parenthesized source link label when available, plus access count when nonzero (e.g., `(link, 2)`, `(link)`, `(2)`).
 - Sorted by insert time, newest first.
 - No pagination or search/filter. All sentences displayed.
@@ -178,6 +180,7 @@ The canonical dictionary form of a token.
 
   2. **Sentence audio**:
      - An audio player appears below the glossed sentence, generated for the sentence text.
+     - Audio is cached per sentence in `sentences.audio_data`.
 
   3. **Natural English translation**:
      - The fluent translation appears below the audio player.
@@ -225,6 +228,7 @@ The canonical dictionary form of a token.
 
   1. **Lemma and translation**:
      - The lemma (bold).
+     - An audio player for the lemma pronunciation (generated from the lemma text).
      - English translation listing 2-3 common meanings if the word is polysemous.
 
   2. **Related words** (optional, max 8):
@@ -312,9 +316,9 @@ The canonical dictionary form of a token.
 | Table           | Key columns                                                                 |
 |-----------------|-----------------------------------------------------------------------------|
 | `settings`      | `password_hash`, `default_language`                                         |
-| `sentences`     | `id`, `language`, `hash`, `text`, `gloss_json`, `proper_nouns_json`, `grammar_notes_json`, `natural_translation`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
+| `sentences`     | `id`, `language`, `hash`, `text`, `gloss_json`, `proper_nouns_json`, `grammar_notes_json`, `natural_translation`, `audio_data`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `sentence_lemmas` | `language`, `normalized_lemma`, `sentence_id`                             |
-| `lemmas`        | `id`, `language`, `normalized_lemma`, `translation`, `related_words_json`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
+| `lemmas`        | `id`, `language`, `normalized_lemma`, `translation`, `related_words_json`, `audio_data`, `model_used`, `schema_version`, `access_count`, `created_at`, `updated_at` |
 | `rss_articles`  | `article_id`                                               |
 | `favorites`     | `id`, `item_type`, `item_id`, `created_at`                                  |
 
@@ -346,6 +350,7 @@ CREATE TABLE IF NOT EXISTS sentences (
   proper_nouns_json TEXT,
   grammar_notes_json TEXT,
   natural_translation TEXT,
+  audio_data BLOB,
   model_used TEXT,
   schema_version INTEGER NOT NULL,
   access_count INTEGER NOT NULL DEFAULT 0,
@@ -376,6 +381,7 @@ CREATE TABLE IF NOT EXISTS lemmas (
   normalized_lemma TEXT NOT NULL,
   translation TEXT,
   related_words_json TEXT,
+  audio_data BLOB,
   model_used TEXT,
   schema_version INTEGER NOT NULL,
   access_count INTEGER NOT NULL DEFAULT 0,
@@ -512,8 +518,10 @@ The following actions use HTMX partial updates that do not push browser history:
 |---------------------|----------------------------------------------|----------|
 | `SECRET_KEY`        | Flask session signing key                    | Yes      |
 | `OPENAI_API_KEY`    | OpenAI API key                               | Yes      |
+| `GOOGLE_APPLICATION_CREDENTIALS` | Path to Google Cloud service account JSON (TTS audio) | Yes |
 
 All environment variables listed above are required. The database path is hard-coded to `./data/app.db`.
+You can store environment variables in a repo-root `.env` file.
 
 ### Setup Steps
 

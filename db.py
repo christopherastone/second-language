@@ -42,6 +42,15 @@ def close_db(exception: Exception | None = None) -> None:
         db.close()
 
 
+def ensure_lemma_audio_column(db: sqlite3.Connection) -> None:
+    """Add the lemmas.audio_data column if it does not exist yet."""
+    columns = db.execute("PRAGMA table_info(lemmas)").fetchall()
+    if any(column["name"] == "audio_data" for column in columns):
+        return
+    db.execute("ALTER TABLE lemmas ADD COLUMN audio_data BLOB")
+    db.commit()
+
+
 def refresh_sentence_lemmas(
     db: sqlite3.Connection,
     language: str,

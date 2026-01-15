@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import yaml
+from dotenv import load_dotenv
 
 MODEL_CHOICES = ["gpt-5-nano", "gpt-5-mini", "gpt-5", "gpt-4.1", "gpt-4o"]
 DEFAULT_MODEL = "gpt-4o"
@@ -17,6 +18,9 @@ RSS_LLM_CONCURRENCY = 5
 MAX_LEMMA_SENTENCES = 20
 
 LANGUAGE_RE = re.compile(r"^[a-z]{2}$")
+
+DOTENV_PATH = Path(__file__).with_name(".env")
+load_dotenv(DOTENV_PATH)
 
 
 def require_env(name: str) -> str:

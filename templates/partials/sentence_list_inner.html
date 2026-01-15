@@ -8,6 +8,19 @@
           <span class="star star-empty" aria-label="not favorited">&#9734;</span>
         {% endif %}
       </div>
+      <div class="sentence-item__audio audio-control">
+        <button class="audio-button" type="button" aria-label="Play sentence audio" aria-pressed="false">
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5l-4 4H4a1 1 0 00-1 1v4a1 1 0 001 1h3l4 4V5z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.5 8.5a4 4 0 010 7" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.5 6.5a7 7 0 010 11" />
+          </svg>
+        </button>
+        <audio
+          class="audio-inline"
+          preload="none"
+          src="{{ url_for('sentence_audio', lang=language, hash_slug=sentence.hash) }}"></audio>
+      </div>
       <div class="sentence-item__content">
         <a class="link sentence-item__link" href="{{ url_for('sentence_detail', lang=language, hash_slug=sentence.hash) }}">
           {{ sentence.text }}

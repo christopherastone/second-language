@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS lemmas (
   normalized_lemma TEXT NOT NULL,
   translation TEXT,
   related_words_json TEXT,
+  audio_data BLOB,
   model_used TEXT,
   schema_version INTEGER NOT NULL,
   access_count INTEGER NOT NULL DEFAULT 0,

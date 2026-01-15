@@ -5,6 +5,11 @@
     <div class="focus-title">
       {{ content.lemma if content else lemma_display }}
     </div>
+    <audio
+      class="lemma-audio"
+      controls
+      preload="none"
+      src="{{ url_for('lemma_audio', lang=language, lemma=lemma_text) }}"></audio>
     {% if content %}
       <p class="lemma-translation">{{ content.translation }}</p>
     {% endif %}

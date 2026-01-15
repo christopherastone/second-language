@@ -51,6 +51,8 @@ Required (app fails to start if missing):
 | `OPENAI_API_KEY` | OpenAI API key (validated via /models endpoint on startup) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | Path to Google Cloud service account JSON (for TTS) |
 
+You can place these in a `.env` file in the repo root (see `.env.example`).
+
 ## Architecture
 
 ### URL Structure
@@ -90,7 +92,7 @@ Required (app fails to start if missing):
 
 - `settings` - password_hash, default_language (single row, id=1)
 - `sentences` - language, hash (16 chars), text, gloss_json, proper_nouns_json, grammar_notes_json, model_used, schema_version, access_count
-- `lemmas` - language, normalized_lemma, translation, related_words_json, model_used, schema_version, access_count
+- `lemmas` - language, normalized_lemma, translation, related_words_json, audio_data, model_used, schema_version, access_count
 - `rss_articles` - feed_id, article_id (deduplication, kept on sentence delete)
 - `favorites` - item_type, item_id, created_at
 

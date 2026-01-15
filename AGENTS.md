@@ -10,6 +10,7 @@ This repository includes the product spec plus the Flask implementation. Key top
 - `init_db.py`, `cli`: database initializer and admin CLI.
 - `llm_raw_sentence.py`: debug script to print raw LLM output for a fixed sentence.
 - `llm_raw_lemma.py`: debug script to print raw LLM output for a fixed lemma.
+- `.env.example`: sample environment variables file.
 - `pyproject.toml`: dependency and project metadata.
 
 As implementation evolves, keep source and templates grouped logically. If you add new top-level paths, update this section.
@@ -36,4 +37,4 @@ Recent commits use short, imperative, sentence-case subjects without prefixes (e
 For PRs, include: a concise summary, the SPEC/behavior changes, and any migration/setup steps (e.g., new env vars, DB changes). Add screenshots only if UI changes are involved.
 
 ## Security & Configuration Tips
-All required env vars are `SECRET_KEY` and `OPENAI_API_KEY`. The database path is hard-coded to `./data/app.db`. Treat `feeds.yaml` as required configuration; malformed or missing files should fail fast.
+Required env vars are `SECRET_KEY`, `OPENAI_API_KEY`, and `GOOGLE_APPLICATION_CREDENTIALS` (TTS). The database path is hard-coded to `./data/app.db`. Treat `feeds.yaml` as required configuration; malformed or missing files should fail fast. Use `.env` (see `.env.example`) for local configuration.
