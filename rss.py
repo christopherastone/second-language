@@ -19,6 +19,7 @@ from llm import LLMOutputError, LLMRequestError, generate_sentence_content
 from normalization import hash_sentence, normalize_text
 
 EDITORIAL_RE = re.compile(r"\[[^\]]+\]")
+PAREN_TAG_RE = re.compile(r"\((?:[^)]*?\b(?:foto|video)\b[^)]*)\)", re.IGNORECASE)
 TRUNCATION_RE = re.compile(r"(\.\.\.|\u2026)$")
 logger = logging.getLogger("second_language.rss")
 
@@ -27,6 +28,7 @@ def _clean_headline(text: str) -> str:
     """Clean up RSS headline text for use as a sentence."""
     cleaned = html.unescape(text or "")
     cleaned = EDITORIAL_RE.sub("", cleaned)
+    cleaned = PAREN_TAG_RE.sub("", cleaned)
     cleaned = TRUNCATION_RE.sub("", cleaned)
     cleaned = cleaned.replace("...", "")
     return normalize_text(cleaned)
