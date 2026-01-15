@@ -1,3 +1,5 @@
+{% from "partials/regenerate_form.html" import regenerate_form %}
+
 <div id="sentence-content" class="fade-in">
     <div class="card card-section">
         {% if content %}
@@ -85,33 +87,14 @@
             hash_slug=sentence.hash) %}
             {% include "partials/favorite_star.html" %}
 
-            <form
-                method="post"
-                action="{{ url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash) }}"
-                hx-post="{{ url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash) }}"
-                hx-target="#sentence-content"
-                hx-swap="outerHTML"
-                hx-push-url="false"
-                class="action-form">
-                <input type="hidden" name="csrf_token"
-                    value="{{ csrf_token() }}" />
-                <select
-                    id="sentence-model"
-                    name="model"
-                    class="select">
-                    {% for model in model_choices %}
-                    <option value="{{ model }}" {% if model == selected_model
-                        %}selected{% endif %}>{{ model }}</option>
-                    {% endfor %}
-                </select>
-                <button
-                    type="submit"
-                    class="btn btn-secondary"
-                    hx-on:htmx:beforeRequest="this.dataset.label=this.innerText; this.innerText='Regenerating...'; this.disabled=true; this.setAttribute('aria-busy','true');"
-                    hx-on:htmx:afterRequest="this.disabled=false; this.innerText=this.dataset.label || 'Regenerate'; this.removeAttribute('aria-busy');">
-                    {{ "Try again" if error else "Regenerate" }}
-                </button>
-            </form>
+            {{ regenerate_form(
+                url_for('sentence_regenerate', lang=language, hash_slug=sentence.hash),
+                "#sentence-content",
+                "sentence-model",
+                model_choices,
+                selected_model,
+                error
+            ) }}
 
             <span class="action-hint">
                 Generated with {{ content.model_used if content else 'unknown'

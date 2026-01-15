@@ -1,7 +1,7 @@
 import json
 import logging
 import time
-from typing import Any
+from typing import Any, Callable
 
 from jsonschema import ValidationError, validate
 from openai import OpenAI, OpenAIError
@@ -539,21 +539,19 @@ LEMMA_SYSTEM_PROMPT = (
 )
 
 
-def generate_sentence_content(
-    language: str,
-    sentence_text: str,
-    model: str | None = None,
+def _generate_payload(
+    *,
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    schema: dict[str, Any],
+    schema_name: str,
+    validator: Callable[[dict[str, Any]], None],
+    log_payload: bool = False,
+    success_log: str | None = None,
 ) -> dict[str, Any]:
-    model = model or DEFAULT_MODEL
     if model not in MODEL_CHOICES:
         raise LLMRequestError(f"Unsupported model: {model}")
-
-    user_prompt = (
-        "Generate sentence analysis for the following.\n"
-        f"Language: {language}\n"
-        f"Sentence (normalized, must match exactly): {sentence_text}\n\n"
-        "Output JSON with keys: sentence_text, natural_english_translation, tokens, proper_nouns, grammar_notes."
-    )
 
     transient_retries = 2
     invalid_retries = 1
@@ -562,16 +560,18 @@ def generate_sentence_content(
         try:
             attempt += 1
             payload = _request_json_schema(
-                SENTENCE_SYSTEM_PROMPT,
+                system_prompt,
                 user_prompt,
                 model,
-                SENTENCE_SCHEMA_OUTPUT,
-                SENTENCE_SCHEMA_NAME,
+                schema,
+                schema_name,
             )
-            logger.debug("LLM returned payload: %s", payload)
-            _validate_sentence_payload(payload, sentence_text)
+            if log_payload:
+                logger.debug("LLM returned payload: %s", payload)
+            validator(payload)
             payload["model_used"] = model
-            logger.debug("Successfully validated LLM payload")
+            if success_log:
+                logger.debug(success_log)
             return payload
         except (json.JSONDecodeError, ValidationError, LLMOutputError) as exc:
             if invalid_retries > 0:
@@ -600,6 +600,35 @@ def generate_sentence_content(
             raise LLMRequestError("LLM request failed") from exc
 
 
+def generate_sentence_content(
+    language: str,
+    sentence_text: str,
+    model: str | None = None,
+) -> dict[str, Any]:
+    model = model or DEFAULT_MODEL
+
+    user_prompt = (
+        "Generate sentence analysis for the following.\n"
+        f"Language: {language}\n"
+        f"Sentence (normalized, must match exactly): {sentence_text}\n\n"
+        "Output JSON with keys: sentence_text, natural_english_translation, tokens, proper_nouns, grammar_notes."
+    )
+
+    def validator(payload: dict[str, Any]) -> None:
+        _validate_sentence_payload(payload, sentence_text)
+
+    return _generate_payload(
+        model=model,
+        system_prompt=SENTENCE_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        schema=SENTENCE_SCHEMA_OUTPUT,
+        schema_name=SENTENCE_SCHEMA_NAME,
+        validator=validator,
+        log_payload=True,
+        success_log="Successfully validated LLM payload",
+    )
+
+
 def generate_lemma_content(
     language: str,
     lemma: str,
@@ -607,8 +636,6 @@ def generate_lemma_content(
     model: str | None = None,
 ) -> dict[str, Any]:
     model = model or DEFAULT_MODEL
-    if model not in MODEL_CHOICES:
-        raise LLMRequestError(f"Unsupported model: {model}")
 
     user_prompt = (
         "Generate lemma details for the following.\n"
@@ -619,48 +646,18 @@ def generate_lemma_content(
         "Output JSON with keys: lemma, normalized_lemma, translation, related_words."
     )
 
-    transient_retries = 2
-    invalid_retries = 1
-    attempt = 0
-    while True:
-        try:
-            attempt += 1
-            payload = _request_json_schema(
-                LEMMA_SYSTEM_PROMPT,
-                user_prompt,
-                model,
-                LEMMA_SCHEMA_OUTPUT,
-                LEMMA_SCHEMA_NAME,
-            )
-            _validate_lemma_payload(payload, normalized_lemma)
-            logger.debug("Successfully validated LLM lemma payload")
-            payload["model_used"] = model
-            return payload
-        except (json.JSONDecodeError, ValidationError, LLMOutputError) as exc:
-            if invalid_retries > 0:
-                logger.warning(
-                    "LLM output invalid, retrying model=%s attempt=%s remaining=%s error=%s",
-                    model,
-                    attempt,
-                    invalid_retries,
-                    exc,
-                )
-                invalid_retries -= 1
-                continue
-            logger.warning("LLM output invalid model=%s error=%s", model, exc)
-            raise LLMOutputError("Invalid LLM output") from exc
-        except OpenAIError as exc:
-            if _is_transient_error(exc) and transient_retries > 0:
-                logger.warning(
-                    "LLM transient error, retrying model=%s attempt=%s remaining=%s",
-                    model,
-                    attempt,
-                    transient_retries,
-                )
-                transient_retries -= 1
-                continue
-            _log_openai_error(model, exc)
-            raise LLMRequestError("LLM request failed") from exc
+    def validator(payload: dict[str, Any]) -> None:
+        _validate_lemma_payload(payload, normalized_lemma)
+
+    return _generate_payload(
+        model=model,
+        system_prompt=LEMMA_SYSTEM_PROMPT,
+        user_prompt=user_prompt,
+        schema=LEMMA_SCHEMA_OUTPUT,
+        schema_name=LEMMA_SCHEMA_NAME,
+        validator=validator,
+        success_log="Successfully validated LLM lemma payload",
+    )
 
 
 def generate_audio(text: str, language: str = "sl") -> bytes:

@@ -22,6 +22,7 @@ from werkzeug.security import check_password_hash
 from config import (
     DEFAULT_MODEL,
     LEMMA_SCHEMA_VERSION,
+    MAX_LEMMA_SENTENCES,
     MODEL_CHOICES,
     SENTENCE_SCHEMA_VERSION,
     get_database_path,
@@ -185,12 +186,185 @@ def generate_lemma_content_cached(
     return None, error
 
 
+def resolve_sentence_content(
+    language: str,
+    row,
+    model: str,
+    force_generate: bool,
+) -> tuple[dict | None, str | None]:
+    row_dict = dict(row)
+    content = get_sentence_content(row_dict)
+    error = None
+    if force_generate or content is None:
+        if force_generate:
+            logger.info(
+                "Sentence regeneration requested language=%s hash=%s model=%s",
+                language,
+                row["hash"],
+                model,
+            )
+        else:
+            logger.info(
+                "Sentence cache miss language=%s hash=%s model=%s",
+                language,
+                row["hash"],
+                model,
+            )
+        generated_content, error = generate_sentence_content_cached(
+            language,
+            row["id"],
+            row["text"],
+            model,
+        )
+        if generated_content is None:
+            if force_generate:
+                logger.warning(
+                    "Sentence regeneration failed language=%s hash=%s",
+                    language,
+                    row["hash"],
+                )
+            else:
+                logger.warning(
+                    "Sentence generation failed language=%s hash=%s",
+                    language,
+                    row["hash"],
+                )
+        else:
+            content = generated_content
+    return content, error
+
+
+def resolve_lemma_content(
+    db,
+    language: str,
+    normalized_lemma: str,
+    row,
+    model: str,
+    force_generate: bool,
+) -> tuple[dict | None, str | None]:
+    row_dict = dict(row)
+    content = get_lemma_content(row_dict)
+    error = None
+    if force_generate:
+        logger.info(
+            "Lemma regeneration requested language=%s lemma=%s model=%s",
+            language,
+            normalized_lemma,
+            model,
+        )
+        generated_content, error = generate_lemma_content_cached(
+            language,
+            row["id"],
+            normalized_lemma,
+            normalized_lemma,
+            model,
+        )
+        if generated_content is None:
+            logger.warning(
+                "Lemma regeneration failed language=%s lemma=%s",
+                language,
+                normalized_lemma,
+            )
+        else:
+            content = generated_content
+        return content, error
+
+    if content is None:
+
+        def checker():
+            refreshed = db.execute(
+                "SELECT * FROM lemmas WHERE language = ? AND normalized_lemma = ?",
+                (language, normalized_lemma),
+            ).fetchone()
+            if refreshed is None:
+                return None
+            return get_lemma_content(dict(refreshed))
+
+        def generator():
+            logger.info(
+                "Lemma cache miss language=%s lemma=%s model=%s",
+                language,
+                normalized_lemma,
+                model,
+            )
+            return generate_lemma_content_cached(
+                language,
+                row["id"],
+                normalized_lemma,
+                normalized_lemma,
+                model,
+            )
+
+        content, error = with_lemma_singleflight(
+            language, normalized_lemma, checker, generator
+        )
+        if error:
+            logger.warning(
+                "Lemma generation failed language=%s lemma=%s",
+                language,
+                normalized_lemma,
+            )
+    return content, error
+
+
 def increment_access(table: str, row_id: int) -> None:
     db = get_db()
     db.execute(
         f"UPDATE {table} SET access_count = access_count + 1 WHERE id = ?", (row_id,)
     )
     db.commit()
+
+
+def fetch_sentence_list(language: str):
+    db = get_db()
+    return db.execute(
+        """
+        SELECT s.*, EXISTS(
+            SELECT 1 FROM favorites f
+            WHERE f.item_type = 'sentence' AND f.item_id = s.id
+        ) AS is_favorite
+        FROM sentences s
+        WHERE s.language = ?
+        ORDER BY s.created_at DESC
+        """,
+        (language,),
+    ).fetchall()
+
+
+def fetch_sentences_for_lemma(language: str, normalized_lemma: str):
+    db = get_db()
+    return db.execute(
+        """
+        SELECT s.*
+        FROM sentences s
+        JOIN sentence_lemmas sl ON sl.sentence_id = s.id
+        WHERE sl.language = ? AND sl.normalized_lemma = ?
+        ORDER BY s.created_at DESC
+        LIMIT ?
+        """,
+        (language, normalized_lemma, MAX_LEMMA_SENTENCES),
+    ).fetchall()
+
+
+def toggle_favorite(item_type: str, item_id: int) -> bool:
+    db = get_db()
+    favorite = db.execute(
+        "SELECT 1 FROM favorites WHERE item_type = ? AND item_id = ?",
+        (item_type, item_id),
+    ).fetchone()
+    if favorite:
+        db.execute(
+            "DELETE FROM favorites WHERE item_type = ? AND item_id = ?",
+            (item_type, item_id),
+        )
+        db.commit()
+        return False
+    db.execute(
+        "INSERT OR IGNORE INTO favorites (item_type, item_id, created_at) VALUES (?, ?, ?)",
+        (item_type, item_id, utc_now()),
+    )
+    db.commit()
+    return True
 
 
 def update_sentence_cache(sentence_id: int, payload: dict) -> None:
@@ -407,19 +581,7 @@ def root():
 @app.route("/<lang>/")
 def sentence_list(lang: str):
     language = require_language(lang)
-    db = get_db()
-    sentences = db.execute(
-        """
-        SELECT s.*, EXISTS(
-            SELECT 1 FROM favorites f
-            WHERE f.item_type = 'sentence' AND f.item_id = s.id
-        ) AS is_favorite
-        FROM sentences s
-        WHERE s.language = ?
-        ORDER BY s.created_at DESC
-        """,
-        (language,),
-    ).fetchall()
+    sentences = fetch_sentence_list(language)
     return render_template("sentence_list.html", language=language, sentences=sentences)
 
 
@@ -430,18 +592,7 @@ def update_sentences(lang: str):
     logger.info("RSS update started language=%s", language)
     new_count = update_from_feeds(language, app.config["FEEDS"], db)
     logger.info("RSS update finished language=%s new_count=%s", language, new_count)
-    sentences = db.execute(
-        """
-        SELECT s.*, EXISTS(
-            SELECT 1 FROM favorites f
-            WHERE f.item_type = 'sentence' AND f.item_id = s.id
-        ) AS is_favorite
-        FROM sentences s
-        WHERE s.language = ?
-        ORDER BY s.created_at DESC
-        """,
-        (language,),
-    ).fetchall()
+    sentences = fetch_sentence_list(language)
     if request.headers.get("HX-Request"):
         return render_template(
             "partials/sentence_list_inner.html", language=language, sentences=sentences
@@ -460,19 +611,13 @@ def sentence_detail(lang: str, hash_slug: str):
     if row is None:
         return redirect(url_for("sentence_list", lang=language))
 
-    content = get_sentence_content(dict(row))
-    error = None
-    if content is None:
-        model = ensure_model(None)
-        logger.info("Sentence cache miss language=%s hash=%s model=%s", language, hash_slug, model)
-        content, error = generate_sentence_content_cached(
-            language,
-            row["id"],
-            row["text"],
-            model,
-        )
-        if content is None:
-            logger.warning("Sentence generation failed language=%s hash=%s", language, hash_slug)
+    model = ensure_model(None)
+    content, error = resolve_sentence_content(
+        language,
+        row,
+        model,
+        force_generate=False,
+    )
 
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'sentence' AND item_id = ?",
@@ -505,18 +650,12 @@ def sentence_regenerate(lang: str, hash_slug: str):
     ).fetchone()
     if row is None:
         abort(404)
-    logger.info("Sentence regeneration requested language=%s hash=%s model=%s", language, hash_slug, model)
-    generated_content, error = generate_sentence_content_cached(
+    content, error = resolve_sentence_content(
         language,
-        row["id"],
-        row["text"],
+        row,
         model,
+        force_generate=True,
     )
-    if generated_content is None:
-        logger.warning("Sentence regeneration failed language=%s hash=%s", language, hash_slug)
-    content = get_sentence_content(dict(row))
-    if generated_content is not None:
-        content = generated_content
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'sentence' AND item_id = ?",
         (row["id"],),
@@ -541,24 +680,7 @@ def sentence_favorite(lang: str, hash_slug: str):
     ).fetchone()
     if row is None:
         abort(404)
-    favorite = db.execute(
-        "SELECT id FROM favorites WHERE item_type = 'sentence' AND item_id = ?",
-        (row["id"],),
-    ).fetchone()
-    if favorite:
-        db.execute(
-            "DELETE FROM favorites WHERE item_type = 'sentence' AND item_id = ?",
-            (row["id"],),
-        )
-        db.commit()
-        is_favorite = False
-    else:
-        db.execute(
-            "INSERT OR IGNORE INTO favorites (item_type, item_id, created_at) VALUES (?, ?, ?)",
-            ("sentence", row["id"], utc_now()),
-        )
-        db.commit()
-        is_favorite = True
+    is_favorite = toggle_favorite("sentence", row["id"])
     return render_template(
         "partials/favorite_star.html",
         item_type="sentence",
@@ -642,40 +764,15 @@ def lemma_detail(lang: str, lemma: str):
             (language, normalized),
         ).fetchone()
 
-    content = get_lemma_content(dict(row))
-    error = None
-    if content is None:
-        model = ensure_model(None)
-
-        def checker():
-            refreshed = db.execute(
-                "SELECT * FROM lemmas WHERE language = ? AND normalized_lemma = ?",
-                (language, normalized),
-            ).fetchone()
-            if refreshed is None:
-                return None
-            return get_lemma_content(dict(refreshed))
-
-        def generator():
-            logger.info(
-                "Lemma cache miss language=%s lemma=%s model=%s",
-                language,
-                normalized,
-                model,
-            )
-            return generate_lemma_content_cached(
-                language,
-                row["id"],
-                normalized,
-                normalized,
-                model,
-            )
-
-        content, error = with_lemma_singleflight(
-            language, normalized, checker, generator
-        )
-        if error:
-            logger.warning("Lemma generation failed language=%s lemma=%s", language, normalized)
+    model = ensure_model(None)
+    content, error = resolve_lemma_content(
+        db,
+        language,
+        normalized,
+        row,
+        model,
+        force_generate=False,
+    )
 
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'lemma' AND item_id = ?",
@@ -685,17 +782,7 @@ def lemma_detail(lang: str, lemma: str):
     if not request.headers.get("HX-Request") and content is not None:
         increment_access("lemmas", row["id"])
 
-    sentences = db.execute(
-        """
-        SELECT s.*
-        FROM sentences s
-        JOIN sentence_lemmas sl ON sl.sentence_id = s.id
-        WHERE sl.language = ? AND sl.normalized_lemma = ?
-        ORDER BY s.created_at DESC
-        LIMIT 20
-        """,
-        (language, normalized),
-    ).fetchall()
+    sentences = fetch_sentences_for_lemma(language, normalized)
 
     return render_template(
         "lemma_detail.html",
@@ -726,36 +813,21 @@ def lemma_regenerate(lang: str, lemma: str):
     if row is None:
         abort(404)
 
-    logger.info("Lemma regeneration requested language=%s lemma=%s model=%s", language, normalized, model)
-    generated_content, error = generate_lemma_content_cached(
+    content, error = resolve_lemma_content(
+        db,
         language,
-        row["id"],
         normalized,
-        normalized,
+        row,
         model,
+        force_generate=True,
     )
-    if generated_content is None:
-        logger.warning("Lemma regeneration failed language=%s lemma=%s", language, normalized)
-    content = get_lemma_content(dict(row))
-    if generated_content is not None:
-        content = generated_content
 
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'lemma' AND item_id = ?",
         (row["id"],),
     ).fetchone()
 
-    sentences = db.execute(
-        """
-        SELECT s.*
-        FROM sentences s
-        JOIN sentence_lemmas sl ON sl.sentence_id = s.id
-        WHERE sl.language = ? AND sl.normalized_lemma = ?
-        ORDER BY s.created_at DESC
-        LIMIT 20
-        """,
-        (language, normalized),
-    ).fetchall()
+    sentences = fetch_sentences_for_lemma(language, normalized)
 
     return render_template(
         "partials/lemma_content.html",
@@ -781,24 +853,7 @@ def lemma_favorite(lang: str, lemma: str):
     ).fetchone()
     if row is None:
         abort(404)
-    favorite = db.execute(
-        "SELECT id FROM favorites WHERE item_type = 'lemma' AND item_id = ?",
-        (row["id"],),
-    ).fetchone()
-    if favorite:
-        db.execute(
-            "DELETE FROM favorites WHERE item_type = 'lemma' AND item_id = ?",
-            (row["id"],),
-        )
-        db.commit()
-        is_favorite = False
-    else:
-        db.execute(
-            "INSERT OR IGNORE INTO favorites (item_type, item_id, created_at) VALUES (?, ?, ?)",
-            ("lemma", row["id"], utc_now()),
-        )
-        db.commit()
-        is_favorite = True
+    is_favorite = toggle_favorite("lemma", row["id"])
     return render_template(
         "partials/favorite_star.html",
         item_type="lemma",

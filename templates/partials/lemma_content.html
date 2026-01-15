@@ -1,3 +1,5 @@
+{% from "partials/regenerate_form.html" import regenerate_form %}
+
 <div id="lemma-content" class="fade-in">
   <div class="card card-section">
     <div class="focus-title">
@@ -56,32 +58,14 @@
       {% set action = url_for('lemma_favorite', lang=language, lemma=lemma_text) %}
       {% include "partials/favorite_star.html" %}
 
-      <form
-        method="post"
-        action="{{ url_for('lemma_regenerate', lang=language, lemma=lemma_text) }}"
-        hx-post="{{ url_for('lemma_regenerate', lang=language, lemma=lemma_text) }}"
-        hx-target="#lemma-content"
-        hx-swap="outerHTML"
-        hx-push-url="false"
-        class="action-form"
-        hx-disabled-elt="button"
-        hx-on:htmx:beforeRequest="const btn=this.querySelector('button'); btn.dataset.label=btn.innerText; btn.innerText='Regenerating...'; btn.setAttribute('aria-busy','true');"
-        hx-on:htmx:afterRequest="const btn=this.querySelector('button'); btn.innerText=btn.dataset.label || 'Regenerate'; btn.removeAttribute('aria-busy');"
-      >
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-        <select
-          id="lemma-model"
-          name="model"
-          class="select"
-        >
-          {% for model in model_choices %}
-            <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
-          {% endfor %}
-        </select>
-        <button type="submit" class="btn btn-secondary">
-          {{ "Try again" if error else "Regenerate" }}
-        </button>
-      </form>
+      {{ regenerate_form(
+        url_for('lemma_regenerate', lang=language, lemma=lemma_text),
+        "#lemma-content",
+        "lemma-model",
+        model_choices,
+        selected_model,
+        error
+      ) }}
 
       <span class="action-hint">
         Generated with {{ content.model_used if content else 'unknown' }}

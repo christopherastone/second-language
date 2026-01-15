@@ -1,0 +1,24 @@
+{% macro regenerate_form(action_url, target_id, select_id, model_choices, selected_model, error) -%}
+  <form
+    method="post"
+    action="{{ action_url }}"
+    hx-post="{{ action_url }}"
+    hx-target="{{ target_id }}"
+    hx-swap="outerHTML"
+    hx-push-url="false"
+    class="action-form"
+    hx-disabled-elt="button"
+    hx-on:htmx:beforeRequest="const btn=this.querySelector('button'); btn.dataset.label=btn.innerText; btn.innerText='Regenerating...'; btn.setAttribute('aria-busy','true');"
+    hx-on:htmx:afterRequest="const btn=this.querySelector('button'); btn.innerText=btn.dataset.label || 'Regenerate'; btn.removeAttribute('aria-busy');"
+  >
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+    <select id="{{ select_id }}" name="model" class="select">
+      {% for model in model_choices %}
+        <option value="{{ model }}" {% if model == selected_model %}selected{% endif %}>{{ model }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary">
+      {{ "Try again" if error else "Regenerate" }}
+    </button>
+  </form>
+{%- endmacro %}

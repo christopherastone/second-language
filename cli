@@ -7,11 +7,10 @@ from werkzeug.security import generate_password_hash
 from config import (
     DEFAULT_MODEL,
     LANGUAGE_RE,
-    SENTENCE_SCHEMA_VERSION,
     is_language_valid,
     load_feeds,
 )
-from db import connect_db, json_dumps, refresh_sentence_lemmas, utc_now
+from db import connect_db, insert_sentence_from_payload, utc_now
 from llm import LLMOutputError, LLMRequestError, generate_sentence_content
 from normalization import hash_sentence, normalize_text
 
@@ -89,33 +88,15 @@ def add_sentence(args, feeds):
         except (LLMRequestError, LLMOutputError) as exc:
             raise SystemExit(f"LLM generation failed: {exc}") from exc
         created_at = utc_now()
-        db.execute(
-            """
-            INSERT INTO sentences (
-                language, hash, text, article_link, gloss_json, proper_nouns_json, grammar_notes_json,
-                natural_translation, model_used, schema_version, access_count, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-            """,
-            (
-                language,
-                sentence_hash,
-                text,
-                None,
-                json_dumps(payload["tokens"]),
-                json_dumps(payload["proper_nouns"]),
-                json_dumps(payload["grammar_notes"]),
-                payload["natural_english_translation"],
-                payload["model_used"],
-                SENTENCE_SCHEMA_VERSION,
-                created_at,
-                created_at,
-            ),
+        insert_sentence_from_payload(
+            db,
+            language=language,
+            sentence_hash=sentence_hash,
+            text=text,
+            article_link=None,
+            payload=payload,
+            created_at=created_at,
         )
-        sentence_id = db.execute(
-            "SELECT id FROM sentences WHERE language = ? AND hash = ?",
-            (language, sentence_hash),
-        ).fetchone()["id"]
-        refresh_sentence_lemmas(db, language, sentence_id, payload["tokens"])
         db.commit()
     finally:
         db.close()

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from flask import g
 
-from config import get_database_path
+from config import SENTENCE_SCHEMA_VERSION, get_database_path
 from normalization import normalize_text, token_has_alpha
 
 
@@ -63,3 +63,40 @@ def refresh_sentence_lemmas(
             """,
             (language, normalized, sentence_id),
         )
+
+
+def insert_sentence_from_payload(
+    db: sqlite3.Connection,
+    *,
+    language: str,
+    sentence_hash: str,
+    text: str,
+    article_link: str | None,
+    payload: dict,
+    created_at: str,
+) -> int:
+    cursor = db.execute(
+        """
+        INSERT INTO sentences (
+            language, hash, text, article_link, gloss_json, proper_nouns_json, grammar_notes_json,
+            natural_translation, model_used, schema_version, access_count, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        """,
+        (
+            language,
+            sentence_hash,
+            text,
+            article_link,
+            json_dumps(payload["tokens"]),
+            json_dumps(payload["proper_nouns"]),
+            json_dumps(payload["grammar_notes"]),
+            payload["natural_english_translation"],
+            payload["model_used"],
+            SENTENCE_SCHEMA_VERSION,
+            created_at,
+            created_at,
+        ),
+    )
+    sentence_id = cursor.lastrowid
+    refresh_sentence_lemmas(db, language, sentence_id, payload["tokens"])
+    return sentence_id

@@ -12,10 +12,9 @@ from config import (
     DEFAULT_MODEL,
     MAX_RSS_NEW_SENTENCES,
     RSS_LLM_CONCURRENCY,
-    SENTENCE_SCHEMA_VERSION,
     enabled_feeds,
 )
-from db import json_dumps, refresh_sentence_lemmas, utc_now
+from db import insert_sentence_from_payload, utc_now
 from llm import LLMOutputError, LLMRequestError, generate_sentence_content
 from normalization import hash_sentence, normalize_text
 
@@ -118,33 +117,15 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
                     continue
                 created_at = utc_now()
                 logger.info("Loading into database.")
-                db.execute(
-                    """
-                    INSERT INTO sentences (
-                        language, hash, text, article_link, gloss_json, proper_nouns_json, grammar_notes_json,
-                        natural_translation, model_used, schema_version, access_count, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-                    """,
-                    (
-                        language,
-                        item["sentence_hash"],
-                        item["headline"],
-                        item["article_link"],
-                        json_dumps(payload["tokens"]),
-                        json_dumps(payload["proper_nouns"]),
-                        json_dumps(payload["grammar_notes"]),
-                        payload["natural_english_translation"],
-                        payload["model_used"],
-                        SENTENCE_SCHEMA_VERSION,
-                        created_at,
-                        created_at,
-                    ),
+                insert_sentence_from_payload(
+                    db,
+                    language=language,
+                    sentence_hash=item["sentence_hash"],
+                    text=item["headline"],
+                    article_link=item["article_link"],
+                    payload=payload,
+                    created_at=created_at,
                 )
-                sentence_id = db.execute(
-                    "SELECT id FROM sentences WHERE language = ? AND hash = ?",
-                    (language, item["sentence_hash"]),
-                ).fetchone()["id"]
-                refresh_sentence_lemmas(db, language, sentence_id, payload["tokens"])
                 db.execute(
                     "INSERT OR IGNORE INTO rss_articles(article_id) VALUES (?)",
                     (item["article_id"],),
