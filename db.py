@@ -10,14 +10,17 @@ from normalization import normalize_text, token_has_alpha
 
 
 def utc_now() -> str:
+    """Return the current UTC timestamp in ISO format without microseconds."""
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def json_dumps(value) -> str:
+    """Serialize a value to JSON with UTF-8 characters preserved."""
     return json.dumps(value, ensure_ascii=False)
 
 
 def connect_db() -> sqlite3.Connection:
+    """Open a SQLite connection with row access by column name."""
     db_path = get_database_path()
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
@@ -26,12 +29,14 @@ def connect_db() -> sqlite3.Connection:
 
 
 def get_db() -> sqlite3.Connection:
+    """Return the request-scoped database connection."""
     if "db" not in g:
         g.db = connect_db()
     return g.db
 
 
 def close_db(exception: Exception | None = None) -> None:
+    """Close the request-scoped database connection if present."""
     db = g.pop("db", None)
     if db is not None:
         db.close()
@@ -43,6 +48,7 @@ def refresh_sentence_lemmas(
     sentence_id: int,
     tokens: list[dict],
 ) -> None:
+    """Rebuild lemma rows for a sentence based on token data."""
     db.execute("DELETE FROM sentence_lemmas WHERE sentence_id = ?", (sentence_id,))
     seen: set[str] = set()
     for token in tokens:
@@ -75,6 +81,7 @@ def insert_sentence_from_payload(
     payload: dict,
     created_at: str,
 ) -> int:
+    """Insert a sentence and related lemma metadata, returning its id."""
     cursor = db.execute(
         """
         INSERT INTO sentences (

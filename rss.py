@@ -24,6 +24,7 @@ logger = logging.getLogger("second_language.rss")
 
 
 def _clean_headline(text: str) -> str:
+    """Clean up RSS headline text for use as a sentence."""
     cleaned = html.unescape(text or "")
     cleaned = EDITORIAL_RE.sub("", cleaned)
     cleaned = TRUNCATION_RE.sub("", cleaned)
@@ -32,6 +33,7 @@ def _clean_headline(text: str) -> str:
 
 
 def _article_id(entry: dict) -> str:
+    """Return a stable identifier for an RSS entry."""
     entry_id = entry.get("id") or entry.get("guid")
     if entry_id:
         return str(entry_id)
@@ -42,6 +44,7 @@ def _article_id(entry: dict) -> str:
 
 
 def _article_link(entry: dict) -> str | None:
+    """Extract and normalize an entry link if present."""
     link = entry.get("link")
     if not link:
         return None
@@ -50,6 +53,7 @@ def _article_link(entry: dict) -> str | None:
 
 
 def _iter_candidates(language: str, feeds: list[dict], db):
+    """Yield candidate headlines not yet stored in the database."""
     for feed in enabled_feeds(language, feeds):
         logger.info(
             "Fetching feed language=%s id=%s url=%s", language, feed["id"], feed["url"]
@@ -93,6 +97,7 @@ def _iter_candidates(language: str, feeds: list[dict], db):
 
 
 def update_from_feeds(language: str, feeds: list[dict], db) -> int:
+    """Fetch RSS feeds, enqueue LLM processing, and insert new sentences."""
     new_count = 0
     candidates = _iter_candidates(language, feeds, db)
     while new_count < MAX_RSS_NEW_SENTENCES:
