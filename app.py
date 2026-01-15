@@ -163,8 +163,14 @@ def generate_sentence_content_cached(
     sentence_id: int,
     sentence_text: str,
     model: str,
+    extra_instructions: str | None = None,
 ) -> tuple[dict | None, str | None]:
-    payload, error = ensure_sentence_payload(language, sentence_text, model)
+    payload, error = ensure_sentence_payload(
+        language,
+        sentence_text,
+        model,
+        extra_instructions=extra_instructions,
+    )
     if payload:
         payload["language"] = language
         update_sentence_cache(sentence_id, payload)
@@ -191,6 +197,7 @@ def resolve_sentence_content(
     row,
     model: str,
     force_generate: bool,
+    extra_instructions: str | None = None,
 ) -> tuple[dict | None, str | None]:
     row_dict = dict(row)
     content = get_sentence_content(row_dict)
@@ -215,6 +222,7 @@ def resolve_sentence_content(
             row["id"],
             row["text"],
             model,
+            extra_instructions=extra_instructions,
         )
         if generated_content is None:
             if force_generate:
@@ -425,9 +433,19 @@ def update_lemma_cache(lemma_id: int, payload: dict) -> None:
     db.commit()
 
 
-def ensure_sentence_payload(language: str, sentence_text: str, model: str) -> tuple[dict | None, str | None]:
+def ensure_sentence_payload(
+    language: str,
+    sentence_text: str,
+    model: str,
+    extra_instructions: str | None = None,
+) -> tuple[dict | None, str | None]:
     try:
-        payload = generate_sentence_content(language, sentence_text, model)
+        payload = generate_sentence_content(
+            language,
+            sentence_text,
+            model,
+            extra_instructions=extra_instructions,
+        )
         payload["language"] = language
         return payload, None
     except (LLMRequestError, LLMOutputError):
@@ -634,6 +652,7 @@ def sentence_detail(lang: str, hash_slug: str):
         content=content,
         error=error,
         is_favorite=bool(is_favorite),
+        extra_notes="",
     )
 
 
@@ -641,6 +660,8 @@ def sentence_detail(lang: str, hash_slug: str):
 def sentence_regenerate(lang: str, hash_slug: str):
     language = require_language(lang)
     model = ensure_model(request.form.get("model"))
+    extra_notes = request.form.get("extra_notes", "").strip()
+    extra_instructions = extra_notes or None
     session["model_choice"] = model
     session["model_choice_source"] = "user"
     db = get_db()
@@ -655,6 +676,7 @@ def sentence_regenerate(lang: str, hash_slug: str):
         row,
         model,
         force_generate=True,
+        extra_instructions=extra_instructions,
     )
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'sentence' AND item_id = ?",
@@ -667,6 +689,7 @@ def sentence_regenerate(lang: str, hash_slug: str):
         content=content,
         error=error,
         is_favorite=bool(is_favorite),
+        extra_notes=extra_notes,
     )
 
 

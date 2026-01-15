@@ -47,9 +47,7 @@ def _object_schema(properties: dict[str, Any], required: list[str]) -> dict[str,
     }
 
 
-def _sentence_token_schema(
-    min_length: bool, require_details: bool
-) -> dict[str, Any]:
+def _sentence_token_schema(min_length: bool, require_details: bool) -> dict[str, Any]:
     required = ["surface"]
     if require_details:
         required = ["surface", "lemma", "translation", "tags"]
@@ -58,7 +56,10 @@ def _sentence_token_schema(
             "surface": _string_schema(min_length),
             "lemma": _string_schema(min_length),
             "translation": _string_schema(min_length),
-            "tags": {"type": "array", "items": {"type": "string", "enum": _TOKEN_TAG_ENUM}},
+            "tags": {
+                "type": "array",
+                "items": {"type": "string", "enum": _TOKEN_TAG_ENUM},
+            },
         },
         required,
     )
@@ -82,7 +83,10 @@ def _sentence_schema(
         "properties": {
             "sentence_text": _string_schema(min_length),
             "natural_english_translation": _string_schema(min_length),
-            "tokens": {"type": "array", "items": _sentence_token_schema(min_length, require_details)},
+            "tokens": {
+                "type": "array",
+                "items": _sentence_token_schema(min_length, require_details),
+            },
             "proper_nouns": {
                 "type": "array",
                 "items": _object_schema(
@@ -604,6 +608,7 @@ def generate_sentence_content(
     language: str,
     sentence_text: str,
     model: str | None = None,
+    extra_instructions: str | None = None,
 ) -> dict[str, Any]:
     model = model or DEFAULT_MODEL
 
@@ -613,6 +618,13 @@ def generate_sentence_content(
         f"Sentence (normalized, must match exactly): {sentence_text}\n\n"
         "Output JSON with keys: sentence_text, natural_english_translation, tokens, proper_nouns, grammar_notes."
     )
+    extra_instructions = (extra_instructions or "").strip()
+    if extra_instructions:
+        user_prompt += (
+            "\n\nAdditional user questions or comments "
+            "(address in grammar_notes where relevant, in addition to other issues of interest):\n"
+            f"{extra_instructions}"
+        )
 
     def validator(payload: dict[str, Any]) -> None:
         _validate_sentence_payload(payload, sentence_text)

@@ -564,6 +564,17 @@ body {
   gap: 0.5rem;
 }
 
+.action-notes {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.action-notes .input {
+  resize: vertical;
+}
+
 .action-hint {
   font-size: 0.75rem;
   color: var(--muted);
