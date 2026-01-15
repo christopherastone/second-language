@@ -2,7 +2,7 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from urllib.parse import quote, unquote
 
 from flask import (
@@ -30,7 +30,7 @@ from config import (
     load_version,
     require_env,
 )
-from db import close_db, get_db
+from db import close_db, get_db, json_dumps, refresh_sentence_lemmas, utc_now
 from llm import LLMOutputError, LLMRequestError, generate_audio, generate_lemma_content, generate_sentence_content, validate_openai_key
 from normalization import normalize_text, token_has_alpha
 from rss import update_from_feeds
@@ -60,10 +60,6 @@ validate_openai_key()
 LOGIN_STATE: dict[str, dict[str, float | int]] = {}
 LEMMA_LOCKS: dict[tuple[str, str], dict[str, object]] = {}
 LEMMA_LOCK = threading.Lock()
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def get_settings() -> dict:
@@ -142,6 +138,53 @@ def get_lemma_content(row: dict) -> dict | None:
     }
 
 
+def sentence_payload_to_content(payload: dict) -> dict:
+    return {
+        "tokens": payload["tokens"],
+        "proper_nouns": payload["proper_nouns"],
+        "grammar_notes": payload["grammar_notes"],
+        "natural_english_translation": payload["natural_english_translation"],
+        "model_used": payload["model_used"],
+    }
+
+
+def lemma_payload_to_content(payload: dict) -> dict:
+    return {
+        "lemma": payload["lemma"],
+        "translation": payload["translation"],
+        "related_words": payload["related_words"],
+        "model_used": payload["model_used"],
+    }
+
+
+def generate_sentence_content_cached(
+    language: str,
+    sentence_id: int,
+    sentence_text: str,
+    model: str,
+) -> tuple[dict | None, str | None]:
+    payload, error = ensure_sentence_payload(language, sentence_text, model)
+    if payload:
+        payload["language"] = language
+        update_sentence_cache(sentence_id, payload)
+        return sentence_payload_to_content(payload), None
+    return None, error
+
+
+def generate_lemma_content_cached(
+    language: str,
+    lemma_id: int,
+    lemma_text: str,
+    normalized_lemma: str,
+    model: str,
+) -> tuple[dict | None, str | None]:
+    payload, error = ensure_lemma_payload(language, lemma_text, normalized_lemma, model)
+    if payload:
+        update_lemma_cache(lemma_id, payload)
+        return lemma_payload_to_content(payload), None
+    return None, error
+
+
 def increment_access(table: str, row_id: int) -> None:
     db = get_db()
     db.execute(
@@ -165,9 +208,9 @@ def update_sentence_cache(sentence_id: int, payload: dict) -> None:
         WHERE id = ?
         """,
         (
-            json.dumps(payload["tokens"], ensure_ascii=False),
-            json.dumps(payload["proper_nouns"], ensure_ascii=False),
-            json.dumps(payload["grammar_notes"], ensure_ascii=False),
+            json_dumps(payload["tokens"]),
+            json_dumps(payload["proper_nouns"]),
+            json_dumps(payload["grammar_notes"]),
             payload["natural_english_translation"],
             payload["model_used"],
             SENTENCE_SCHEMA_VERSION,
@@ -175,26 +218,12 @@ def update_sentence_cache(sentence_id: int, payload: dict) -> None:
             sentence_id,
         ),
     )
-    db.execute("DELETE FROM sentence_lemmas WHERE sentence_id = ?", (sentence_id,))
-    seen: set[str] = set()
-    for token in payload["tokens"]:
-        surface = token.get("surface", "")
-        if not token_has_alpha(surface):
-            continue
-        lemma = token.get("lemma")
-        if not lemma:
-            continue
-        normalized = normalize_text(lemma)
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        db.execute(
-            """
-            INSERT OR IGNORE INTO sentence_lemmas (language, normalized_lemma, sentence_id)
-            VALUES (?, ?, ?)
-            """,
-            (payload["language"], normalized, sentence_id),
-        )
+    refresh_sentence_lemmas(
+        db,
+        payload["language"],
+        sentence_id,
+        payload["tokens"],
+    )
     db.commit()
 
 
@@ -212,7 +241,7 @@ def update_lemma_cache(lemma_id: int, payload: dict) -> None:
         """,
         (
             payload["translation"],
-            json.dumps(payload["related_words"], ensure_ascii=False),
+            json_dumps(payload["related_words"]),
             payload["model_used"],
             LEMMA_SCHEMA_VERSION,
             utc_now(),
@@ -436,18 +465,13 @@ def sentence_detail(lang: str, hash_slug: str):
     if content is None:
         model = ensure_model(None)
         logger.info("Sentence cache miss language=%s hash=%s model=%s", language, hash_slug, model)
-        payload, error = ensure_sentence_payload(language, row["text"], model)
-        if payload:
-            payload["language"] = language
-            update_sentence_cache(row["id"], payload)
-            content = {
-                "tokens": payload["tokens"],
-                "proper_nouns": payload["proper_nouns"],
-                "grammar_notes": payload["grammar_notes"],
-                "natural_english_translation": payload["natural_english_translation"],
-                "model_used": payload["model_used"],
-            }
-        else:
+        content, error = generate_sentence_content_cached(
+            language,
+            row["id"],
+            row["text"],
+            model,
+        )
+        if content is None:
             logger.warning("Sentence generation failed language=%s hash=%s", language, hash_slug)
 
     is_favorite = db.execute(
@@ -482,21 +506,17 @@ def sentence_regenerate(lang: str, hash_slug: str):
     if row is None:
         abort(404)
     logger.info("Sentence regeneration requested language=%s hash=%s model=%s", language, hash_slug, model)
-    payload, error = ensure_sentence_payload(language, row["text"], model)
-    if payload:
-        payload["language"] = language
-        update_sentence_cache(row["id"], payload)
-    else:
+    generated_content, error = generate_sentence_content_cached(
+        language,
+        row["id"],
+        row["text"],
+        model,
+    )
+    if generated_content is None:
         logger.warning("Sentence regeneration failed language=%s hash=%s", language, hash_slug)
     content = get_sentence_content(dict(row))
-    if payload:
-        content = {
-            "tokens": payload["tokens"],
-            "proper_nouns": payload["proper_nouns"],
-            "grammar_notes": payload["grammar_notes"],
-            "natural_english_translation": payload["natural_english_translation"],
-            "model_used": payload["model_used"],
-        }
+    if generated_content is not None:
+        content = generated_content
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'sentence' AND item_id = ?",
         (row["id"],),
@@ -643,19 +663,13 @@ def lemma_detail(lang: str, lemma: str):
                 normalized,
                 model,
             )
-            payload, err = ensure_lemma_payload(language, normalized, normalized, model)
-            if payload:
-                update_lemma_cache(row["id"], payload)
-                return (
-                    {
-                        "lemma": payload["lemma"],
-                        "translation": payload["translation"],
-                        "related_words": payload["related_words"],
-                        "model_used": payload["model_used"],
-                    },
-                    None,
-                )
-            return None, err
+            return generate_lemma_content_cached(
+                language,
+                row["id"],
+                normalized,
+                normalized,
+                model,
+            )
 
         content, error = with_lemma_singleflight(
             language, normalized, checker, generator
@@ -713,19 +727,18 @@ def lemma_regenerate(lang: str, lemma: str):
         abort(404)
 
     logger.info("Lemma regeneration requested language=%s lemma=%s model=%s", language, normalized, model)
-    payload, error = ensure_lemma_payload(language, normalized, normalized, model)
-    if payload:
-        update_lemma_cache(row["id"], payload)
-    else:
+    generated_content, error = generate_lemma_content_cached(
+        language,
+        row["id"],
+        normalized,
+        normalized,
+        model,
+    )
+    if generated_content is None:
         logger.warning("Lemma regeneration failed language=%s lemma=%s", language, normalized)
     content = get_lemma_content(dict(row))
-    if payload:
-        content = {
-            "lemma": payload["lemma"],
-            "translation": payload["translation"],
-            "related_words": payload["related_words"],
-            "model_used": payload["model_used"],
-        }
+    if generated_content is not None:
+        content = generated_content
 
     is_favorite = db.execute(
         "SELECT 1 FROM favorites WHERE item_type = 'lemma' AND item_id = ?",

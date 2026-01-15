@@ -9,222 +9,170 @@ from openai import OpenAI, OpenAIError
 from config import DEFAULT_MODEL, MODEL_CHOICES, require_env
 from normalization import normalize_text, token_has_alpha
 
-SENTENCE_SCHEMA = {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "SentenceDetailGenerationV1",
-    "type": "object",
-    "additionalProperties": False,
-    "required": [
-        "sentence_text",
-        "natural_english_translation",
-        "tokens",
-        "proper_nouns",
-        "grammar_notes",
-    ],
-    "properties": {
-        "sentence_text": {"type": "string", "minLength": 1},
-        "natural_english_translation": {"type": "string", "minLength": 1},
-        "tokens": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["surface"],
-                "properties": {
-                    "surface": {"type": "string", "minLength": 1},
-                    "lemma": {"type": "string", "minLength": 1},
-                    "translation": {"type": "string", "minLength": 1},
-                    "tags": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "enum": [
-                                "1",
-                                "2",
-                                "3",
-                                "f",
-                                "sg",
-                                "du",
-                                "pl",
-                                "nom",
-                                "gen",
-                                "dat",
-                                "acc",
-                                "ins",
-                                "loc",
-                                "refl",
-                                "ptcp",
-                            ],
-                        },
-                    },
-                },
-            },
-        },
-        "proper_nouns": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["nominative", "definition"],
-                "properties": {
-                    "nominative": {"type": "string", "minLength": 1},
-                    "definition": {"type": "string", "minLength": 1},
-                },
-            },
-        },
-        "grammar_notes": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["title", "note"],
-                "properties": {
-                    "title": {"type": "string", "minLength": 1},
-                    "note": {"type": "string", "minLength": 1},
-                },
-            },
-        },
-    },
-}
-SENTENCE_SCHEMA_OUTPUT = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": [
-        "sentence_text",
-        "natural_english_translation",
-        "tokens",
-        "proper_nouns",
-        "grammar_notes",
-    ],
-    "properties": {
-        "sentence_text": {"type": "string"},
-        "natural_english_translation": {"type": "string"},
-        "tokens": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["surface", "lemma", "translation", "tags"],
-                "properties": {
-                    "surface": {"type": "string"},
-                    "lemma": {"type": "string"},
-                    "translation": {"type": "string"},
-                    "tags": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "enum": [
-                                "1",
-                                "2",
-                                "3",
-                                "f",
-                                "sg",
-                                "du",
-                                "pl",
-                                "nom",
-                                "gen",
-                                "dat",
-                                "acc",
-                                "ins",
-                                "loc",
-                                "refl",
-                                "ptcp",
-                            ],
-                        },
-                    },
-                },
-            },
-        },
-        "proper_nouns": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["nominative", "definition"],
-                "properties": {
-                    "nominative": {"type": "string"},
-                    "definition": {"type": "string"},
-                },
-            },
-        },
-        "grammar_notes": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["title", "note"],
-                "properties": {
-                    "title": {"type": "string"},
-                    "note": {"type": "string"},
-                },
-            },
-        },
-    },
-}
 SENTENCE_SCHEMA_NAME = "SentenceDetailGenerationV1"
-
-LEMMA_SCHEMA = {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
-    "title": "LemmaPageGenerationV1",
-    "type": "object",
-    "additionalProperties": False,
-    "required": [
-        "lemma",
-        "normalized_lemma",
-        "translation",
-        "related_words",
-    ],
-    "properties": {
-        "lemma": {"type": "string", "minLength": 1},
-        "normalized_lemma": {"type": "string", "minLength": 1},
-        "translation": {"type": "string", "minLength": 1},
-        "related_words": {
-            "type": "array",
-            "maxItems": 8,
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["word", "normalized_lemma", "translation", "note"],
-                "properties": {
-                    "word": {"type": "string", "minLength": 1},
-                    "normalized_lemma": {"type": "string", "minLength": 1},
-                    "translation": {"type": "string", "minLength": 1},
-                    "note": {"type": "string", "minLength": 1},
-                },
-            },
-        },
-    },
-}
-LEMMA_SCHEMA_OUTPUT = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": [
-        "lemma",
-        "normalized_lemma",
-        "translation",
-        "related_words",
-    ],
-    "properties": {
-        "lemma": {"type": "string"},
-        "normalized_lemma": {"type": "string"},
-        "translation": {"type": "string"},
-        "related_words": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "additionalProperties": False,
-                "required": ["word", "normalized_lemma", "translation", "note"],
-                "properties": {
-                    "word": {"type": "string"},
-                    "normalized_lemma": {"type": "string"},
-                    "translation": {"type": "string"},
-                    "note": {"type": "string"},
-                },
-            },
-        },
-    },
-}
 LEMMA_SCHEMA_NAME = "LemmaPageGenerationV1"
+
+_TOKEN_TAG_ENUM = [
+    "1",
+    "2",
+    "3",
+    "f",
+    "sg",
+    "du",
+    "pl",
+    "nom",
+    "gen",
+    "dat",
+    "acc",
+    "ins",
+    "loc",
+    "refl",
+    "ptcp",
+]
+
+
+def _string_schema(min_length: bool) -> dict[str, Any]:
+    schema: dict[str, Any] = {"type": "string"}
+    if min_length:
+        schema["minLength"] = 1
+    return schema
+
+
+def _object_schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": required,
+        "properties": properties,
+    }
+
+
+def _sentence_token_schema(
+    min_length: bool, require_details: bool
+) -> dict[str, Any]:
+    required = ["surface"]
+    if require_details:
+        required = ["surface", "lemma", "translation", "tags"]
+    return _object_schema(
+        {
+            "surface": _string_schema(min_length),
+            "lemma": _string_schema(min_length),
+            "translation": _string_schema(min_length),
+            "tags": {"type": "array", "items": {"type": "string", "enum": _TOKEN_TAG_ENUM}},
+        },
+        required,
+    )
+
+
+def _sentence_schema(
+    min_length: bool,
+    require_details: bool,
+    include_meta: bool,
+) -> dict[str, Any]:
+    schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "sentence_text",
+            "natural_english_translation",
+            "tokens",
+            "proper_nouns",
+            "grammar_notes",
+        ],
+        "properties": {
+            "sentence_text": _string_schema(min_length),
+            "natural_english_translation": _string_schema(min_length),
+            "tokens": {"type": "array", "items": _sentence_token_schema(min_length, require_details)},
+            "proper_nouns": {
+                "type": "array",
+                "items": _object_schema(
+                    {
+                        "nominative": _string_schema(min_length),
+                        "definition": _string_schema(min_length),
+                    },
+                    ["nominative", "definition"],
+                ),
+            },
+            "grammar_notes": {
+                "type": "array",
+                "items": _object_schema(
+                    {
+                        "title": _string_schema(min_length),
+                        "note": _string_schema(min_length),
+                    },
+                    ["title", "note"],
+                ),
+            },
+        },
+    }
+    if include_meta:
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": SENTENCE_SCHEMA_NAME,
+            **schema,
+        }
+    return schema
+
+
+def _lemma_schema(
+    min_length: bool,
+    include_meta: bool,
+    include_max_items: bool,
+) -> dict[str, Any]:
+    related_words: dict[str, Any] = {
+        "type": "array",
+        "items": _object_schema(
+            {
+                "word": _string_schema(min_length),
+                "normalized_lemma": _string_schema(min_length),
+                "translation": _string_schema(min_length),
+                "note": _string_schema(min_length),
+            },
+            ["word", "normalized_lemma", "translation", "note"],
+        ),
+    }
+    if include_max_items:
+        related_words["maxItems"] = 8
+    schema: dict[str, Any] = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["lemma", "normalized_lemma", "translation", "related_words"],
+        "properties": {
+            "lemma": _string_schema(min_length),
+            "normalized_lemma": _string_schema(min_length),
+            "translation": _string_schema(min_length),
+            "related_words": related_words,
+        },
+    }
+    if include_meta:
+        schema = {
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": LEMMA_SCHEMA_NAME,
+            **schema,
+        }
+    return schema
+
+
+SENTENCE_SCHEMA = _sentence_schema(
+    min_length=True,
+    require_details=False,
+    include_meta=True,
+)
+SENTENCE_SCHEMA_OUTPUT = _sentence_schema(
+    min_length=False,
+    require_details=True,
+    include_meta=False,
+)
+LEMMA_SCHEMA = _lemma_schema(
+    min_length=True,
+    include_meta=True,
+    include_max_items=True,
+)
+LEMMA_SCHEMA_OUTPUT = _lemma_schema(
+    min_length=False,
+    include_meta=False,
+    include_max_items=False,
+)
 
 TRANSIENT_STATUS = {429, 500, 502, 503, 504}
 
@@ -303,44 +251,26 @@ def _is_unsupported_text_format(exc: Exception) -> bool:
     return "text" in message or "format" in message
 
 
-def request_raw_text(system_prompt: str, user_prompt: str, model: str) -> str:
-    client = get_client()
-    start = time.monotonic()
-    logger.info("LLM request started model=%s", model)
-
-    def make_request(use_text_format: bool):
-        params: dict[str, Any] = {
-            "model": model,
-            "input": user_prompt,
-            "instructions": system_prompt,
-        }
-        if use_text_format:
-            params["text"] = {"format": {"type": "json_object"}}
-        return client.responses.create(**params)
-
-    try:
-        response = make_request(use_text_format=True)
-    except OpenAIError as exc:
-        if _is_unsupported_text_format(exc):
+def _log_text_format_fallback(model: str, exc: Exception, schema_format: bool) -> None:
+    if schema_format:
+        body = getattr(exc, "body", None)
+        if body:
             logger.warning(
-                "LLM text format unsupported; retrying without it model=%s", model
+                "LLM structured output rejected model=%s body=%s", model, body
             )
-            response = make_request(use_text_format=False)
-        else:
-            raise
-    logger.info("LLM response received model=%s", model)
-    text = _extract_output_text(response)
-    elapsed = time.monotonic() - start
-    logger.info("LLM request completed model=%s elapsed=%.2fs", model, elapsed)
-    return text
+        logger.warning(
+            "LLM structured output unsupported; retrying without it model=%s", model
+        )
+        return
+    logger.warning("LLM text format unsupported; retrying without it model=%s", model)
 
 
-def request_raw_schema_text(
+def _request_raw_text(
     system_prompt: str,
     user_prompt: str,
     model: str,
-    schema: dict[str, Any],
-    schema_name: str,
+    text_format: dict[str, Any] | None,
+    schema_format: bool,
 ) -> str:
     client = get_client()
     start = time.monotonic()
@@ -352,30 +282,15 @@ def request_raw_schema_text(
             "input": user_prompt,
             "instructions": system_prompt,
         }
-        if use_text_format:
-            params["text"] = {
-                "format": {
-                    "type": "json_schema",
-                    "name": schema_name,
-                    "schema": schema,
-                    "strict": True,
-                }
-            }
+        if use_text_format and text_format:
+            params["text"] = {"format": text_format}
         return client.responses.create(**params)
 
     try:
-        response = make_request(use_text_format=True)
+        response = make_request(use_text_format=bool(text_format))
     except OpenAIError as exc:
-        if _is_unsupported_text_format(exc):
-            body = getattr(exc, "body", None)
-            if body:
-                logger.warning(
-                    "LLM structured output rejected model=%s body=%s", model, body
-                )
-            logger.warning(
-                "LLM structured output unsupported; retrying without it model=%s",
-                model,
-            )
+        if text_format and _is_unsupported_text_format(exc):
+            _log_text_format_fallback(model, exc, schema_format)
             response = make_request(use_text_format=False)
         else:
             raise
@@ -384,6 +299,37 @@ def request_raw_schema_text(
     elapsed = time.monotonic() - start
     logger.info("LLM request completed model=%s elapsed=%.2fs", model, elapsed)
     return text
+
+
+def request_raw_text(system_prompt: str, user_prompt: str, model: str) -> str:
+    return _request_raw_text(
+        system_prompt,
+        user_prompt,
+        model,
+        {"type": "json_object"},
+        schema_format=False,
+    )
+
+
+def request_raw_schema_text(
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    schema: dict[str, Any],
+    schema_name: str,
+) -> str:
+    return _request_raw_text(
+        system_prompt,
+        user_prompt,
+        model,
+        {
+            "type": "json_schema",
+            "name": schema_name,
+            "schema": schema,
+            "strict": True,
+        },
+        schema_format=True,
+    )
 
 
 def _request_json_schema(

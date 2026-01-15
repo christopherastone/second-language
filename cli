@@ -1,8 +1,6 @@
 #!/usr/bin/env python
 import argparse
-import json
 import secrets
-from datetime import datetime, timezone
 
 from werkzeug.security import generate_password_hash
 
@@ -13,25 +11,9 @@ from config import (
     is_language_valid,
     load_feeds,
 )
+from db import connect_db, json_dumps, refresh_sentence_lemmas, utc_now
 from llm import LLMOutputError, LLMRequestError, generate_sentence_content
 from normalization import hash_sentence, normalize_text
-
-import sqlite3
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
-
-def get_db():
-    from config import get_database_path
-    from pathlib import Path
-
-    db_path = get_database_path()
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    return conn
 
 
 def ensure_language(lang: str, feeds: list[dict]) -> str:
@@ -45,7 +27,7 @@ def ensure_language(lang: str, feeds: list[dict]) -> str:
 
 def set_password(args, feeds):
     password_hash = generate_password_hash(args.password)
-    db = get_db()
+    db = connect_db()
     try:
         row = db.execute("SELECT default_language FROM settings WHERE id = 1").fetchone()
         if row:
@@ -68,7 +50,7 @@ def set_password(args, feeds):
 
 def set_language(args, feeds):
     language = ensure_language(args.language, feeds)
-    db = get_db()
+    db = connect_db()
     try:
         row = db.execute("SELECT password_hash FROM settings WHERE id = 1").fetchone()
         if row:
@@ -94,7 +76,7 @@ def add_sentence(args, feeds):
         raise SystemExit("Sentence text is empty after normalization")
     sentence_hash = hash_sentence(text)
 
-    db = get_db()
+    db = connect_db()
     try:
         existing = db.execute(
             "SELECT id FROM sentences WHERE language = ? AND hash = ?",
@@ -119,9 +101,9 @@ def add_sentence(args, feeds):
                 sentence_hash,
                 text,
                 None,
-                json.dumps(payload["tokens"], ensure_ascii=False),
-                json.dumps(payload["proper_nouns"], ensure_ascii=False),
-                json.dumps(payload["grammar_notes"], ensure_ascii=False),
+                json_dumps(payload["tokens"]),
+                json_dumps(payload["proper_nouns"]),
+                json_dumps(payload["grammar_notes"]),
                 payload["natural_english_translation"],
                 payload["model_used"],
                 SENTENCE_SCHEMA_VERSION,
@@ -133,28 +115,7 @@ def add_sentence(args, feeds):
             "SELECT id FROM sentences WHERE language = ? AND hash = ?",
             (language, sentence_hash),
         ).fetchone()["id"]
-        db.execute("DELETE FROM sentence_lemmas WHERE sentence_id = ?", (sentence_id,))
-        seen: set[str] = set()
-        from normalization import token_has_alpha
-
-        for token in payload["tokens"]:
-            surface = token.get("surface", "")
-            if not token_has_alpha(surface):
-                continue
-            lemma = token.get("lemma")
-            if not lemma:
-                continue
-            normalized = normalize_text(lemma)
-            if not normalized or normalized in seen:
-                continue
-            seen.add(normalized)
-            db.execute(
-                """
-                INSERT OR IGNORE INTO sentence_lemmas (language, normalized_lemma, sentence_id)
-                VALUES (?, ?, ?)
-                """,
-                (language, normalized, sentence_id),
-            )
+        refresh_sentence_lemmas(db, language, sentence_id, payload["tokens"])
         db.commit()
     finally:
         db.close()

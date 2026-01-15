@@ -3,7 +3,6 @@ import html
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
 from itertools import islice
 
 import feedparser
@@ -16,16 +15,13 @@ from config import (
     SENTENCE_SCHEMA_VERSION,
     enabled_feeds,
 )
+from db import json_dumps, refresh_sentence_lemmas, utc_now
 from llm import LLMOutputError, LLMRequestError, generate_sentence_content
 from normalization import hash_sentence, normalize_text
 
 EDITORIAL_RE = re.compile(r"\[[^\]]+\]")
 TRUNCATION_RE = re.compile(r"(\.\.\.|\u2026)$")
 logger = logging.getLogger("second_language.rss")
-
-
-def utc_now() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _clean_headline(text: str) -> str:
@@ -148,7 +144,7 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
                     "SELECT id FROM sentences WHERE language = ? AND hash = ?",
                     (language, item["sentence_hash"]),
                 ).fetchone()["id"]
-                _refresh_sentence_lemmas(db, language, sentence_id, payload["tokens"])
+                refresh_sentence_lemmas(db, language, sentence_id, payload["tokens"])
                 db.execute(
                     "INSERT OR IGNORE INTO rss_articles(article_id) VALUES (?)",
                     (item["article_id"],),
@@ -163,36 +159,3 @@ def update_from_feeds(language: str, feeds: list[dict], db) -> int:
         if new_count >= MAX_RSS_NEW_SENTENCES:
             break
     return new_count
-
-
-def json_dumps(value) -> str:
-    import json
-
-    return json.dumps(value, ensure_ascii=False)
-
-
-def _refresh_sentence_lemmas(
-    db, language: str, sentence_id: int, tokens: list[dict]
-) -> None:
-    from normalization import normalize_text, token_has_alpha
-
-    db.execute("DELETE FROM sentence_lemmas WHERE sentence_id = ?", (sentence_id,))
-    seen: set[str] = set()
-    for token in tokens:
-        surface = token.get("surface", "")
-        if not token_has_alpha(surface):
-            continue
-        lemma = token.get("lemma")
-        if not lemma:
-            continue
-        normalized = normalize_text(lemma)
-        if not normalized or normalized in seen:
-            continue
-        seen.add(normalized)
-        db.execute(
-            """
-            INSERT OR IGNORE INTO sentence_lemmas (language, normalized_lemma, sentence_id)
-            VALUES (?, ?, ?)
-            """,
-            (language, normalized, sentence_id),
-        )
